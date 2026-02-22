@@ -1,7 +1,7 @@
-import { Logger } from '@nestjs/common';
-import { NormalizedScoringResult } from '../dto/ai-scoring.dto';
-import { AIProvider } from '../entities/ai-result-entity';
-import { IAIProvider } from '../interface/ai-provider.interface';
+import { Logger } from "@nestjs/common";
+import { NormalizedScoringResult } from "../dto/ai-scoring.dto";
+import { AIProvider } from "../entities/ai-result-entity";
+import { IAIProvider } from "../interface/ai-provider.interface";
 
 export abstract class BaseAIProvider implements IAIProvider {
   protected readonly logger: Logger;
@@ -18,24 +18,31 @@ export abstract class BaseAIProvider implements IAIProvider {
     this.timeout = options?.timeout || 30000;
   }
 
-  abstract score(userData: Record<string, any>): Promise<NormalizedScoringResult>;
-  
+  abstract score(
+    userData: Record<string, any>,
+  ): Promise<NormalizedScoringResult>;
+
   abstract isHealthy(): Promise<boolean>;
 
   getName(): string {
     return this.providerName;
   }
 
+  isConfigured(): boolean {
+    return !!this.apiKey;
+  }
   protected normalizeScore(score: number, min: number, max: number): number {
     // Normalize to 0-100 scale
     return Math.round(((score - min) / (max - min)) * 100);
   }
 
-  protected calculateRiskLevel(riskScore: number): 'low' | 'medium' | 'high' | 'very-high' {
-    if (riskScore <= 25) return 'low';
-    if (riskScore <= 50) return 'medium';
-    if (riskScore <= 75) return 'high';
-    return 'very-high';
+  protected calculateRiskLevel(
+    riskScore: number,
+  ): "low" | "medium" | "high" | "very-high" {
+    if (riskScore <= 25) return "low";
+    if (riskScore <= 50) return "medium";
+    if (riskScore <= 75) return "high";
+    return "very-high";
   }
 
   protected async withRetry<T>(
@@ -50,10 +57,12 @@ export abstract class BaseAIProvider implements IAIProvider {
           throw error;
         }
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-        this.logger.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        this.logger.warn(
+          `Attempt ${attempt + 1} failed, retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
-    throw new Error('Max retries exceeded');
+    throw new Error("Max retries exceeded");
   }
 }
