@@ -12,6 +12,7 @@ import { AuditLogModule } from "./audit/audit-log.module";
 import { WorkerModule } from "./worker/worker.module";
 import { OracleModule } from "./oracle/oracle.module";
 import { TransactionModule } from "./transaction/transaction.module";
+import { RateLimitingModule } from "./rate-limiting/rate-limiting.module";
 
 import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
@@ -44,6 +45,7 @@ import { CacheConfigFactory } from "./config/cache.factory";
     AuditLogModule,
     WorkerModule,
     OracleModule,
+    RateLimitingModule,
   ],
   controllers: [AppController],
 })
