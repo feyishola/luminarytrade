@@ -4,6 +4,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short,
     Address, Bytes, BytesN, Env, Map, Symbol,
 };
+use common_utils::error::{AuthorizationError, CryptoError, ValidationError, ContractError};
 
 /// -------------------------
 /// Storage Keys
@@ -47,16 +48,16 @@ pub struct RiskEvaluationContract;
 /// -------------------------
 #[contractimpl]
 impl RiskEvaluationContract {
-
     /// Initialize contract with AI bridge public key
-    pub fn init(env: Env, bridge_pubkey: BytesN<32>) {
+    pub fn init(env: Env, bridge_pubkey: BytesN<32>) -> Result<(), AuthorizationError> {
         if env.storage().instance().has(&DataKey::BridgePubKey) {
-            panic!("already initialized");
+            return Err(AuthorizationError::AlreadyInitialized);
         }
 
         env.storage()
             .instance()
             .set(&DataKey::BridgePubKey, &bridge_pubkey);
+        Ok(())
     }
 
     /// Submit signed risk evaluation
@@ -65,12 +66,12 @@ impl RiskEvaluationContract {
         attestation: RiskAttestation,
         signature: BytesN<64>,
         payload: Bytes,
-    ) {
+    ) -> Result<(), CryptoError> {
         let bridge_pubkey: BytesN<32> = env
             .storage()
             .instance()
             .get(&DataKey::BridgePubKey)
-            .expect("bridge key not set");
+            .ok_or(CryptoError::InvalidPublicKey)?;
 
         // Verify signature
         let valid = env.crypto().ed25519_verify(
@@ -80,13 +81,13 @@ impl RiskEvaluationContract {
         );
 
         if !valid {
-            panic!("invalid signature");
+            return Err(CryptoError::SignatureVerificationFailed);
         }
 
         // Optional replay protection (basic)
         let now = env.ledger().timestamp();
         if attestation.timestamp > now + 60 {
-            panic!("invalid timestamp");
+            return Err(CryptoError::InvalidSignature);
         }
 
         // Store risk level for agent
@@ -99,6 +100,8 @@ impl RiskEvaluationContract {
             (symbol_short!("RiskEvaluated"), attestation.agent),
             attestation.risk,
         );
+
+        Ok(())
     }
 
     /// Get risk level for an agent

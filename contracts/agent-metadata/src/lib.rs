@@ -1,30 +1,40 @@
 #![no_std]
 
-use soroban_sdk::{contracttype, Bytes, Env, Error, Vec};
+use soroban_sdk::{contracttype, Bytes, Env, Vec};
+use common_utils::error::{ValidationError, ContractError};
 
-/// Errors that can occur during metadata validation
+/// Legacy error type for backward compatibility
+/// Maps to new ValidationError codes
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum MetadataError {
-    /// Invalid JSON format
+    /// Invalid JSON format -> ValidationError::InvalidJsonStructure
     InvalidJsonFormat = 1,
-    /// Missing required field
+    /// Missing required field -> ValidationError::MissingRequiredField
     MissingRequiredField = 2,
-    /// Invalid CID format
+    /// Invalid CID format -> ValidationError::InvalidCidFormat
     InvalidCidFormat = 3,
-    /// Hash verification failed
+    /// Hash verification failed -> ValidationError::InvalidHashFormat
     HashVerificationFailed = 4,
-    /// Invalid metadata structure
+    /// Invalid metadata structure -> ValidationError::InvalidFormat
     InvalidStructure = 5,
-    /// CID too long
+    /// CID too long -> ValidationError::InvalidLength
     CidTooLong = 6,
-    /// Hash too long
+    /// Hash too long -> ValidationError::InvalidLength
     HashTooLong = 7,
 }
 
-impl From<MetadataError> for Error {
-    fn from(error: MetadataError) -> Self {
-        Error::from_contract_error(error as u32)
+impl MetadataError {
+    /// Convert legacy MetadataError to new ValidationError
+    pub fn to_validation_error(&self) -> ValidationError {
+        match self {
+            MetadataError::InvalidJsonFormat => ValidationError::InvalidJsonStructure,
+            MetadataError::MissingRequiredField => ValidationError::MissingRequiredField,
+            MetadataError::InvalidCidFormat => ValidationError::InvalidCidFormat,
+            MetadataError::HashVerificationFailed => ValidationError::InvalidHashFormat,
+            MetadataError::InvalidStructure => ValidationError::InvalidFormat,
+            MetadataError::CidTooLong | MetadataError::HashTooLong => ValidationError::InvalidLength,
+        }
     }
 }
 

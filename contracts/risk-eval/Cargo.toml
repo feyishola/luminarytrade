@@ -1,7 +1,7 @@
 [package]
-name = "fraud-detect"
+name = "risk-eval"
 version = "0.1.0"
-description = "Fraud detection smart contract for ChenAIKit"
+description = "Risk evaluation smart contract for ChenAIKit"
 authors = ["ChenAIKit Team"]
 edition = "2021"
 
