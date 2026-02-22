@@ -12,7 +12,7 @@ import { AdapterConfig, AdapterMetadata } from '../interfaces/base-adapter.inter
  * Provides common functionality for all AI provider adapters.
  */
 export abstract class BaseAIModelAdapter implements IAIModelAdapter {
-  protected readonly logger: Logger;
+  protected logger: Logger;
   protected readonly config: AdapterConfig;
 
   constructor(

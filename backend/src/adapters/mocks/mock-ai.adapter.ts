@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { BaseAIModelAdapter } from '../ai/base-ai-model.adapter';
 import {
   NormalizedScoringResult,
@@ -11,7 +10,6 @@ import {
  * Simulates AI provider operations without external dependencies
  */
 export class MockAIAdapter extends BaseAIModelAdapter {
-  private readonly logger = new Logger(MockAIAdapter.name);
   private shouldFail = false;
   private mockResults: Map<string, NormalizedScoringResult> = new Map();
 
