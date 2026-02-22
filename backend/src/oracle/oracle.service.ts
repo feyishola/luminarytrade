@@ -14,6 +14,10 @@ import {
   OracleSnapshotRecordedEvent, 
   PriceFeedUpdatedEvent 
 } from '../events/domain-events/oracle.events';
+import { CacheManager } from '../cache/cache-manager.service';
+import { CacheInvalidator } from '../cache/cache-invalidator.service';
+import { Cacheable } from '../cache/decorators/cacheable.decorator';
+import { CacheInvalidate } from '../cache/decorators/cache-invalidate.decorator';
 
 export interface FeedPrice {
   pair: string;
@@ -38,6 +42,8 @@ export class OracleService {
     private readonly transactionManager: TransactionManager,
     @Inject("EventBus")
     private readonly eventBus: IEventBus,
+    private readonly cacheManager: CacheManager,
+    private readonly cacheInvalidator: CacheInvalidator,
   ) {
     this.oracleSignerAddress = process.env.ORACLE_SIGNER_ADDRESS;
     this.maxClockSkewMs = parseInt(process.env.ORACLE_MAX_CLOCK_SKEW_MS || '120000', 10);
@@ -56,6 +62,7 @@ export class OracleService {
    * Update oracle snapshot with price feeds using transactional scope
    * with compensation pattern for rollback scenarios
    */
+  @CacheInvalidate({ rule: 'oracle:snapshot' })
   async updateSnapshot(dto: UpdateOracleDto): Promise<UpdateSnapshotResult> {
     // Verify signature outside transaction
     const recovered = await verifySignature(dto.signature, dto.timestamp, dto.feeds);
@@ -213,6 +220,11 @@ export class OracleService {
   /**
    * Get latest prices with optional caching
    */
+  @Cacheable({
+    key: 'latest',
+    ttl: 60, // 1 minute
+    namespace: 'oracle',
+  })
   async getLatest(): Promise<FeedPrice[]> {
     const latest = await this.latestRepo.find();
     return latest.map((l) => ({
