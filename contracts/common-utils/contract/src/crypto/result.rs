@@ -1,0 +1,1 @@
+pub type CryptoResult<T> = Result<T, CryptoError>;
