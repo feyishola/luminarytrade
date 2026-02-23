@@ -44,6 +44,68 @@ export interface RawFraudReportResponse {
   resolved_at: string | null;
 }
 
+// ─── Raw Transaction ──────────────────────────────────────────────────────────
+
+export interface RawTransactionFee {
+  base_fee: string;
+  priority_fee?: string;
+  total_fee: string;
+  formatted_total: string;
+}
+
+export interface RawTransactionError {
+  error_code: string;
+  error_message: string;
+  error_details?: Record<string, unknown>;
+  retryable: boolean;
+}
+
+export interface RawTransactionResponse {
+  tx_hash: string;
+  status: "pending" | "confirmed" | "failed" | "unknown";
+  type: "payment" | "contract_call" | "token_transfer" | "other";
+  from_address: string;
+  to_address: string;
+  amount?: string;
+  fees: RawTransactionFee;
+  confirmations: number;
+  estimated_completion_time?: number;
+  completed_at?: string;
+  block_number?: number;
+  submitted_at: string;
+  last_updated_at: string;
+  error?: RawTransactionError;
+  raw_data?: string;
+  explorer_url?: string;
+  memo?: string;
+}
+
+export interface RawTransactionHistoryResponse {
+  transactions: RawTransactionResponse[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
+export interface RawTransactionSubmissionResponse {
+  success: boolean;
+  tx_hash?: string;
+  estimated_fees?: RawTransactionFee;
+  error?: RawTransactionError;
+  requires_signing: boolean;
+}
+
+export interface RawGasEstimateResponse {
+  base_fee: string;
+  priority_fee_low: string;
+  priority_fee_medium: string;
+  priority_fee_high: string;
+  estimated_time_low: number;
+  estimated_time_medium: number;
+  estimated_time_high: number;
+}
+
 // ─── Generic API wrapper ──────────────────────────────────────────────────────
 
 /** What the HTTP layer returns before any mapping */
