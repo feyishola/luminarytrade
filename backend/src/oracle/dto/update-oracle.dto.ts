@@ -1,5 +1,6 @@
-import { IsArray, IsInt, IsNotEmpty, IsNumberString, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsInt, IsNotEmpty, IsNumberString, IsString, ValidateNested, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsValidTimestamp, IsValidSignature, IsValidWalletAddress } from '../../common/validators';
 
 export class OracleFeedDto {
   @IsString()
@@ -16,6 +17,7 @@ export class OracleFeedDto {
 
 export class UpdateOracleDto {
   @IsInt()
+  @IsValidTimestamp()
   timestamp: number; // unix seconds (or ms) — standardize in your app
 
   @IsArray()
@@ -25,8 +27,11 @@ export class UpdateOracleDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsValidSignature()
   signature: string;
 
+  @IsOptional()
   @IsString()
+  @IsValidWalletAddress()
   signer?: string; // optional, can be derived from signature verification
 }

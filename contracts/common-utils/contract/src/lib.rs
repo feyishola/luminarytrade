@@ -4,10 +4,20 @@ pub mod error;
 pub mod oracle_bridge;
 pub mod marketplace_types;
 pub mod marketplace;
+pub mod validator;
 
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, Symbol, Address, Env, Bytes, Vec, 
-    contracterror, contracttype, BytesN,
+    contract,
+    contractimpl,
+    panic_with_error,
+    Symbol,
+    Address,
+    Env,
+    Bytes,
+    Vec,
+    contracterror,
+    contracttype,
+    BytesN,
 };
 
 #[contracttype]
@@ -28,8 +38,7 @@ pub struct Attestation {
     pub attestation_hash: BytesN<32>, // unique ID / replay protection
 }
 
-
-use soroban_sdk::{contract, contractimpl, Env};
+use soroban_sdk::{ contract, contractimpl, Env };
 
 #[contract]
 pub struct EvolutionManager;
@@ -41,24 +50,34 @@ impl EvolutionManager {
         agent: Address,
         new_level: u32,
         total_stake: i128,
-        attestation_hash: BytesN<32>,
+        attestation_hash: BytesN<32>
     ) {
         env.events().publish(
             ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash),
+            (agent, new_level, total_stake, attestation_hash)
         );
     }
 }
 
-
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, Symbol, Address, Env, Bytes, Vec, 
-    contracterror, contracttype,
+    contract,
+    contractimpl,
+    panic_with_error,
+    Symbol,
+    Address,
+    Env,
+    Bytes,
+    Vec,
+    contracterror,
+    contracttype,
 };
 
 pub use storage::{
-    IStorageKey, InstanceStorageRepository, PersistentStorageRepository,
-    StorageRepository, TemporaryStorageRepository,
+    IStorageKey,
+    InstanceStorageRepository,
+    PersistentStorageRepository,
+    StorageRepository,
+    TemporaryStorageRepository,
 };
 
 #[contracterror]
@@ -95,15 +114,15 @@ pub struct Execution {
     pub id: u64,
     pub agent: Address,
     pub action_type: ActionType,
-    pub data: Bytes, 
+    pub data: Bytes,
     pub timestamp: u64,
 }
 
 #[contract]
 pub struct CommonUtilsContract;
 
-const RATE_LIMIT_WINDOW: u64 = 3600; 
-const RATE_LIMIT_MAX: u32 = 10; 
+const RATE_LIMIT_WINDOW: u64 = 3600;
+const RATE_LIMIT_MAX: u32 = 10;
 
 #[contractimpl]
 impl CommonUtilsContract {
@@ -121,7 +140,11 @@ impl CommonUtilsContract {
 
         Self::check_rate_limit(&env, &agent);
 
-        let counter = env.storage().persistent().get::<_, u64>(&Symbol::new(&env, "exec_cnt")).unwrap_or(0);
+        let counter = env
+            .storage()
+            .persistent()
+            .get::<_, u64>(&Symbol::new(&env, "exec_cnt"))
+            .unwrap_or(0);
         let execution_id = counter + 1;
 
         let timestamp = env.ledger().timestamp();
@@ -135,15 +158,18 @@ impl CommonUtilsContract {
 
         let execution_key = (Symbol::new(&env, "execution"), execution_id);
         if env.storage().persistent().has(&execution_key) {
-             panic_with_error!(&env, Error::ExecutionIdExists);
+            panic_with_error!(&env, Error::ExecutionIdExists);
         }
-        
+
         env.storage().persistent().set(&execution_key, &execution);
         env.storage().persistent().set(&Symbol::new(&env, "exec_cnt"), &execution_id);
 
         Self::update_rate_limit(&env, &agent, timestamp);
 
-        env.events().publish((Symbol::new(&env, "act_sub"),), (execution_id, agent, action_type, timestamp));
+        env.events().publish(
+            (Symbol::new(&env, "act_sub"),),
+            (execution_id, agent, action_type, timestamp)
+        );
 
         execution_id
     }
@@ -161,15 +187,15 @@ impl CommonUtilsContract {
         let now = env.ledger().timestamp();
         let window_start = now.saturating_sub(RATE_LIMIT_WINDOW);
         let key = (Symbol::new(&env, "rate_limit"), agent.clone());
-        
+
         let actions: Vec<u64> = env.storage().temporary().get(&key).unwrap_or(Vec::new(env));
         let mut recent_count = 0;
         for t in actions.iter() {
-             if t >= window_start {
-                 recent_count += 1;
-             }
+            if t >= window_start {
+                recent_count += 1;
+            }
         }
-        
+
         if recent_count >= RATE_LIMIT_MAX {
             panic_with_error!(env, Error::RateLimitExceeded);
         }
@@ -193,11 +219,11 @@ impl EvolutionManager {
         agent: Address,
         new_level: u32,
         total_stake: i128,
-        attestation_hash: BytesN<32>,
+        attestation_hash: BytesN<32>
     ) {
         env.events().publish(
             ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash),
+            (agent, new_level, total_stake, attestation_hash)
         );
     }
 }

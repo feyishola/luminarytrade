@@ -6,6 +6,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const CreditScoring = lazy(() => import('./components/CreditScoring'));
 const FraudDetection = lazy(() => import('./components/FraudDetection'));
 const WalletInterface = lazy(() => import('./components/WalletInterface'));
+const TransactionPage = lazy(() => import('./components/TransactionPage'));
 
 // Loading fallback component
 const Loading: React.FC = () => (
@@ -22,6 +23,7 @@ const App: React.FC = () => {
       case 'scoring': import('./components/CreditScoring'); break;
       case 'fraud': import('./components/FraudDetection'); break;
       case 'wallet': import('./components/WalletInterface'); break;
+      case 'transactions': import('./components/TransactionPage'); break;
     }
   };
 
@@ -41,6 +43,9 @@ const App: React.FC = () => {
           <li>
             <Link to="/wallet" onMouseEnter={() => prefetchComponent('wallet')}>Wallet</Link>
           </li>
+          <li>
+            <Link to="/transactions" onMouseEnter={() => prefetchComponent('transactions')}>Transactions</Link>
+          </li>
         </ul>
       </nav>
 
@@ -51,6 +56,7 @@ const App: React.FC = () => {
             <Route path="/scoring" element={<CreditScoring />} />
             <Route path="/fraud" element={<FraudDetection />} />
             <Route path="/wallet" element={<WalletInterface />} />
+            <Route path="/transactions" element={<TransactionPage />} />
           </Routes>
         </Suspense>
       </main>
