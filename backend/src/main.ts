@@ -5,6 +5,7 @@ import { RateLimitGuard } from './rate-limiting/guards/rate-limit.guard';
 import { SystemLoadMiddleware } from './rate-limiting/middleware/system-load.middleware';
 import { TracingInterceptor } from './tracing/interceptors/tracing.interceptor';
 import { TracingMiddleware } from './tracing/middleware/tracing.middleware';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,6 +18,8 @@ async function bootstrap() {
   // Apply tracing middleware
   const tracingMiddleware = app.get(TracingMiddleware);
   app.use(tracingMiddleware.use.bind(tracingMiddleware));
+
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Apply tracing interceptor globally
   const tracingInterceptor = app.get(TracingInterceptor);
