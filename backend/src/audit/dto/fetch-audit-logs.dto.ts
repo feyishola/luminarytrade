@@ -1,10 +1,12 @@
 import { IsOptional, IsString, IsEnum, IsDate } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AuditEventType } from '../entities/audit-log.entity';
+import { IsValidWalletAddress } from '../../common/validators';
 
 export class FetchAuditLogsDto {
   @IsOptional()
   @IsString()
+  @IsValidWalletAddress()
   wallet?: string;
 
   @IsOptional()

@@ -1,8 +1,10 @@
 import { IsNotEmpty, IsString } from 'class-validator';
+import { IsValidWalletAddress } from '../../common/validators';
 
 export class LoginDto {
   @IsString()
   @IsNotEmpty()
+  @IsValidWalletAddress()
   publicKey: string;
 
   @IsString()
