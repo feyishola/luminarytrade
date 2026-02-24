@@ -1,40 +1,29 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { EventReplayService } from '../event-replay.service';
 import { EventStore } from '../event-store.service';
-import { NestEventBus } from '../nest-event-bus.service';
 import { AIResultCreatedEvent } from '../domain-events/ai-result.events';
+import { IEventBus } from '../interfaces/event-bus.interface';
 
 describe('EventReplayService', () => {
   let service: EventReplayService;
   let eventStore: EventStore;
-  let eventBus: NestEventBus;
+  let eventBus: IEventBus;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventReplayService,
-        {
-          provide: EventStore,
-          useValue: {
-            getEventStream: jest.fn(),
-            getEvents: jest.fn(),
-            getLatestVersion: jest.fn(),
-            createSnapshot: jest.fn(),
-            getLatestSnapshot: jest.fn(),
-          },
-        },
-        {
-          provide: NestEventBus,
-          useValue: {
-            publish: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+  beforeEach(() => {
+    eventStore = {
+      getEventStream: jest.fn(),
+      getEvents: jest.fn(),
+      getLatestVersion: jest.fn(),
+      createSnapshot: jest.fn(),
+      getLatestSnapshot: jest.fn(),
+    } as unknown as EventStore;
+    eventBus = {
+      publish: jest.fn(),
+      publishBatch: jest.fn(),
+      subscribe: jest.fn(),
+      unsubscribe: jest.fn(),
+    } as unknown as IEventBus;
 
-    service = module.get<EventReplayService>(EventReplayService);
-    eventStore = module.get<EventStore>(EventStore);
-    eventBus = module.get<NestEventBus>(NestEventBus);
+    service = new EventReplayService(eventStore, eventBus);
   });
 
   it('should be defined', () => {

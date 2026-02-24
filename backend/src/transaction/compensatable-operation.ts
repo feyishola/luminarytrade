@@ -12,7 +12,7 @@ export abstract class CompensatableOperation implements ICompensatableOperation 
     return this.operationName;
   }
 
-  async execute(manager: EntityManager): Promise<void> {
+  async execute(manager: EntityManager): Promise<any> {
     if (this.executed) {
       throw new Error(`Operation ${this.operationName} has already been executed`);
     }
@@ -20,6 +20,7 @@ export abstract class CompensatableOperation implements ICompensatableOperation 
     try {
       this.executionResult = await this.doExecute(manager);
       this.executed = true;
+      return this.executionResult;
     } catch (error) {
       throw new Error(
         `Operation ${this.operationName} failed: ${(error as Error).message}`,

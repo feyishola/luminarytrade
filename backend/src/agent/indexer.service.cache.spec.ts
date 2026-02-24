@@ -162,7 +162,7 @@ describe('IndexerService - Caching', () => {
       await service.updatePerformanceMetrics('123', metrics);
 
       expect(cacheInvalidator.invalidate).toHaveBeenCalledWith('agent:performance-update');
-      expect(cacheInvalidator.invalidateKeys).toHaveBeenCalledWith(['agent:123']);
+      expect(cacheInvalidator.invalidateKeys).toHaveBeenCalledWith(['agent:123'], undefined);
     });
   });
 

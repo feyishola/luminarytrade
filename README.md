@@ -175,6 +175,12 @@ main().catch(console.error);
 
 ---
 
+## Documentation
+
+- `docs/authentication.md` - JWT auth flow, refresh rotation, CSRF, and frontend integration details.
+
+---
+
 ## Contributing
 
 We welcome contributions — bug reports, features, documentation improvements, examples, and tests.

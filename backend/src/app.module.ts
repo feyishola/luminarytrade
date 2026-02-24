@@ -14,6 +14,7 @@ import { OracleModule } from "./oracle/oracle.module";
 import { TransactionModule } from "./transaction/transaction.module";
 import { RateLimitingModule } from "./rate-limiting/rate-limiting.module";
 import { TracingModule } from "./tracing/tracing.module";
+import { AuthModule } from "./auth/auth.module";
 
 import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
@@ -48,6 +49,7 @@ import { CacheConfigFactory } from "./config/cache.factory";
     WorkerModule,
     OracleModule,
     RateLimitingModule,
+    AuthModule,
   ],
   controllers: [AppController],
 })

@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { Action } from '../constants/actions.enum';
+import { Action } from '../constant/actions.enum';
 
 export const REQUIRE_PERMISSION = 'require_permission';
 
