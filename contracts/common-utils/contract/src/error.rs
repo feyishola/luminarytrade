@@ -47,6 +47,7 @@ pub enum ErrorCategory {
     State,
     External,
     TimeLock,
+    Batch,
     Unknown,
 }
 
@@ -550,6 +551,10 @@ pub mod registry {
     pub const TIMELOCK_ERROR_CODES: &[u32] =
         &[1601, 1602, 1603, 1604, 1605, 1606, 1607, 1608, 1609, 1610];
 
+    /// Get all Batch error codes
+    pub const BATCH_ERROR_CODES: &[u32] =
+        &[1701, 1702, 1703, 1704, 1705, 1706, 1707, 1708];
+
     /// Get error category for a code
     pub fn get_category(code: u32) -> ErrorCategory {
         match code {
@@ -560,6 +565,7 @@ pub mod registry {
             1400..=1499 => ErrorCategory::State,
             1500..=1599 => ErrorCategory::External,
             1600..=1699 => ErrorCategory::TimeLock,
+            1700..=1799 => ErrorCategory::Batch,
             _ => ErrorCategory::Unknown,
         }
     }
