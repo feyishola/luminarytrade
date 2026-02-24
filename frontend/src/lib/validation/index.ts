@@ -10,7 +10,6 @@ export type {
   FormValidationState,
   AsyncValidationResult,
   ValidationRule,
-  ValidationErrorCode,
   ErrorMessageMap,
   ValidatorComposer,
   FieldValidatorConfig,
@@ -86,4 +85,5 @@ export {
 } from './helpers';
 
 // Re-export for convenience
+export { ValidationErrorCode } from './types';
 export { ValidationErrorCode as ErrorCode } from './types';

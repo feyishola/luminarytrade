@@ -1,4 +1,20 @@
 import React from 'react';
+import { useAuth } from '../AuthContext';
+import { useWallet } from '../WalletContext';
+import {
+  useNotification,
+  createSuccessNotification,
+  createErrorNotification,
+  createWarningNotification,
+  createInfoNotification,
+} from '../NotificationContext';
+import {
+  usePreferences,
+  useThemePreferences,
+  useNotificationPreferences,
+  useAccessibilityPreferences,
+} from '../PreferencesContext';
+import { useErrorBoundary } from '../ErrorBoundaryContext';
 
 // Export all custom hooks from contexts
 export { useAuth } from '../AuthContext';

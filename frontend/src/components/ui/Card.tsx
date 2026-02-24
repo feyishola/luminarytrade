@@ -104,6 +104,7 @@ export const Card: React.FC<CardProps> = ({
   maxWidth,
   "data-testid": dataTestId,
 }) => {
+  const [isHovered, setIsHovered] = React.useState(false);
   const baseStyles: CSSProperties = {
     ...VARIANT_STYLES[variant],
     borderRadius: BORDER_RADIUS_STYLES[borderRadius],
@@ -114,15 +115,13 @@ export const Card: React.FC<CardProps> = ({
     boxSizing: "border-box",
     ...style,
   };
-
-  const hoverStyles: CSSProperties = hoverable
-    ? {
-        ":hover": {
+  const hoverStyles: CSSProperties =
+    hoverable && isHovered
+      ? {
           boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
           transform: "translateY(-2px)",
-        },
-      }
-    : {};
+        }
+      : {};
 
   const renderHeader = () => {
     if (header) return header;
@@ -171,6 +170,8 @@ export const Card: React.FC<CardProps> = ({
       className={`ui-card ui-card--${variant} ${className}`}
       style={{ ...baseStyles, ...hoverStyles }}
       onClick={onClick}
+      onMouseEnter={hoverable ? () => setIsHovered(true) : undefined}
+      onMouseLeave={hoverable ? () => setIsHovered(false) : undefined}
       data-testid={dataTestId || "card"}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
