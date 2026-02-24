@@ -5,6 +5,7 @@ pub mod oracle_bridge;
 pub mod marketplace_types;
 pub mod marketplace;
 pub mod validator;
+pub mod acl;
 
 use soroban_sdk::{
     contract,
@@ -15,9 +16,9 @@ use soroban_sdk::{
     Env,
     Bytes,
     Vec,
-    contracterror,
     contracttype,
     BytesN,
+    IntoVal,
 };
 
 #[contracttype]
@@ -38,39 +39,7 @@ pub struct Attestation {
     pub attestation_hash: BytesN<32>, // unique ID / replay protection
 }
 
-use soroban_sdk::{ contract, contractimpl, Env };
 
-#[contract]
-pub struct EvolutionManager;
-
-#[contractimpl]
-impl EvolutionManager {
-    pub fn emit_evolution_completed(
-        env: Env,
-        agent: Address,
-        new_level: u32,
-        total_stake: i128,
-        attestation_hash: BytesN<32>
-    ) {
-        env.events().publish(
-            ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash)
-        );
-    }
-}
-
-use soroban_sdk::{
-    contract,
-    contractimpl,
-    panic_with_error,
-    Symbol,
-    Address,
-    Env,
-    Bytes,
-    Vec,
-    contracterror,
-    contracttype,
-};
 
 pub use storage::{
     IStorageKey,
@@ -206,6 +175,12 @@ impl CommonUtilsContract {
         let mut actions: Vec<u64> = env.storage().temporary().get(&key).unwrap_or(Vec::new(env));
         actions.push_back(timestamp);
         env.storage().temporary().set(&key, &actions);
+    }
+
+    /// Helper to check permission against ACL contract
+    /// In a production scenario, this would be a cross-contract call.
+    pub fn check_permission(env: Env, acl_address: Address, user: Address, resource: Symbol, action: Symbol) -> bool {
+        env.invoke_contract::<bool>(&acl_address, &Symbol::new(&env, "has_permission"), soroban_sdk::vec![&env, user.into_val(&env), resource.into_val(&env), action.into_val(&env)])
     }
 }
 

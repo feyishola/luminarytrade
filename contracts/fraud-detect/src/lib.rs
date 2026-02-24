@@ -8,7 +8,7 @@ use common_utils::error::{AuthorizationError, StateError, ContractError};
 #[contracttype]
 pub enum DataKey {
     Admin,
-    Reporter(Address),
+    AclContract,
     Reports(Symbol),
 }
 
@@ -52,36 +52,29 @@ impl FraudDetectContract {
     pub fn update_model(_env: Env, _model_data: String) {
         // TODO: Implement model updates
 
-    /// Initialize the fraud detection contract with an administrator
-    pub fn initialize(env: Env, admin: Address) -> Result<(), StateError> {
+    /// Initialize the fraud detection contract with an administrator and ACL contract
+    pub fn initialize(env: Env, admin: Address, acl_contract: Address) -> Result<(), StateError> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(StateError::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::AclContract, &acl_contract);
         Ok(())
     }
 
-    /// Add an approved reporter (Admin only)
-    pub fn add_reporter(env: Env, reporter: Address) -> Result<(), AuthorizationError> {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(AuthorizationError::NotInitialized)?;
-        admin.require_auth();
-        env.storage().instance().set(&DataKey::Reporter(reporter), &true);
-        Ok(())
-    }
+    /// Add an approved reporter (ACL Managed)
+    /// This function can now be called by anyone as long as they have the permission in ACL
+    pub fn add_reporter(env: Env, caller: Address, reporter: Address) -> Result<(), AuthorizationError> {
+        caller.require_auth();
+        
+        let acl: Address = env.storage().instance().get(&DataKey::AclContract).ok_or(AuthorizationError::NotInitialized)?;
+        
+        if !common_utils::check_permission(env.clone(), acl, caller, symbol_short!("fraud"), symbol_short!("manage")) {
+            return Err(AuthorizationError::NotAuthorized);
+        }
 
-    /// Remove an approved reporter (Admin only)
-    pub fn remove_reporter(env: Env, reporter: Address) -> Result<(), AuthorizationError> {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(AuthorizationError::NotInitialized)?;
-        admin.require_auth();
-        env.storage().instance().remove(&DataKey::Reporter(reporter));
+        // The actual role granting happens in the ACL contract, but we can have local state if needed.
+        // For this refactor, we rely entirely on ACL for reporter status in submit_report.
         Ok(())
     }
 
@@ -94,14 +87,10 @@ impl FraudDetectContract {
     ) -> Result<(), AuthorizationError> {
         reporter.require_auth();
 
-        let is_reporter: bool = env
-            .storage()
-            .instance()
-            .get(&DataKey::Reporter(reporter.clone()))
-            .unwrap_or(false);
+        let acl: Address = env.storage().instance().get(&DataKey::AclContract).ok_or(AuthorizationError::NotInitialized)?;
 
-        if !is_reporter {
-            return Err(AuthorizationError::NotApprovedReporter);
+        if !common_utils::check_permission(env.clone(), acl, reporter.clone(), symbol_short!("fraud"), symbol_short!("report")) {
+            return Err(AuthorizationError::NotAuthorized);
         }
 
         let mut reports: Vec<FraudReport> = env

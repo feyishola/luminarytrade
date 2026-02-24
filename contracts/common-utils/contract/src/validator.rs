@@ -393,9 +393,10 @@ impl BytesValidator {
                 }
                 BytesPattern::Utf8 => {
                     // Basic UTF-8 validation (simplified)
-                    std::str::from_utf8(bytes).is_ok()
+                    // Basic UTF-8 validation (simplified)
+                    core::str::from_utf8(bytes).is_ok()
                 }
-                BytesPattern::Custom validator) => {
+                BytesPattern::Custom(validator) => {
                     validator(bytes)
                 }
             }
@@ -476,8 +477,8 @@ impl AddressValidator {
         if !self.allow_zero_address {
             // Check if it's not the zero address
             // This is a simplified check - in practice you'd want more sophisticated validation
-            let env = Env::default();
-            let zero_address = Address::from_string(&env, &soroban_sdk::String::from_str(&env, "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADO5"));
+            let env = address.env();
+            let zero_address = Address::from_string(&soroban_sdk::String::from_str(env, "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADO5"));
             address != &zero_address
         } else {
             true
@@ -499,10 +500,12 @@ impl Validator<Address> for AddressValidator {
     }
 }
 
+/*
 /// Composed validator that combines multiple validators
 #[derive(Clone, Debug)]
 pub struct ComposedValidator<T> {
-    validators: Vec<Box<dyn Validator<T>>>,
+    // Box is not supported without alloc in no_std
+    // validators: Vec<Box<dyn Validator<T>>>,
     mode: CompositionMode,
 }
 
@@ -516,7 +519,7 @@ pub enum CompositionMode {
 impl<T> ComposedValidator<T> {
     pub fn new() -> Self {
         Self {
-            validators: Vec::new(),
+            // validators: Vec::new(),
             mode: CompositionMode::All,
         }
     }
@@ -526,10 +529,10 @@ impl<T> ComposedValidator<T> {
         self
     }
     
-    pub fn add_validator<V: Validator<T> + 'static>(mut self, validator: V) -> Self {
-        self.validators.push(Box::new(validator));
-        self
-    }
+    // pub fn add_validator<V: Validator<T> + 'static>(mut self, validator: V) -> Self {
+    //     self.validators.push(Box::new(validator));
+    //     self
+    // }
     
     pub fn all_validators() -> Self {
         Self::new().with_mode(CompositionMode::All)
@@ -548,27 +551,27 @@ impl<T: Clone> Validator<T> for ComposedValidator<T> {
     fn validate(&self, env: &Env, input: &T) -> Result<(), ValidationError> {
         match self.mode {
             CompositionMode::All => {
-                for validator in &self.validators {
-                    validator.validate(env, input)?;
-                }
+                // for validator in &self.validators {
+                //     validator.validate(env, input)?;
+                // }
                 Ok(())
             }
             CompositionMode::Any => {
                 let mut last_error = ValidationError::InvalidFormat;
-                for validator in &self.validators {
-                    match validator.validate(env, input) {
-                        Ok(()) => return Ok(()),
-                        Err(e) => last_error = e,
-                    }
-                }
+                // for validator in &self.validators {
+                //     match validator.validate(env, input) {
+                //         Ok(()) => return Ok(()),
+                //         Err(e) => last_error = e,
+                //     }
+                // }
                 Err(last_error)
             }
             CompositionMode::First => {
-                for validator in &self.validators {
-                    if let Ok(()) = validator.validate(env, input) {
-                        return Ok(());
-                    }
-                }
+                // for validator in &self.validators {
+                //     if let Ok(()) = validator.validate(env, input) {
+                //         return Ok(());
+                //     }
+                // }
                 Err(ValidationError::InvalidFormat)
             }
         }
@@ -578,6 +581,7 @@ impl<T: Clone> Validator<T> for ComposedValidator<T> {
         "ComposedValidator"
     }
 }
+*/
 
 /// Validator registry for managing validators by name
 pub struct ValidatorRegistry {
@@ -596,9 +600,9 @@ impl ValidatorRegistry {
     }
     
     /// Get a validator by name
-    pub fn get<T>(&self, name: &str) -> Option<Box<dyn Validator<T>>> {
+    pub fn get<T>(&self, _name: &str) -> Option<Symbol> {
         // In a real implementation, you'd retrieve from storage
-        // For now, return None as placeholder
+        // Trait objects (Box<dyn>) are not suitable here without alloc
         None
     }
 }
