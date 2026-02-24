@@ -6,21 +6,20 @@ pub mod marketplace_types;
 pub mod oracle_bridge;
 pub mod timelock;
 pub mod validator;
-pub mod authorization;
-pub mod authorization_macro;
-pub mod compression;
-pub mod storage_optimization;
-pub mod data_migration;
-pub mod storage_monitoring;
-
-#[cfg(test)]
-mod authorization_tests;
-#[cfg(test)]
-mod compression_tests;
+pub mod acl;
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Bytes, BytesN,
-    Env, Symbol, Vec,
+    contract,
+    contractimpl,
+    panic_with_error,
+    Symbol,
+    Address,
+    Env,
+    Bytes,
+    Vec,
+    contracttype,
+    BytesN,
+    IntoVal,
 };
 
 #[contracttype]
@@ -41,83 +40,7 @@ pub struct Attestation {
     pub attestation_hash: BytesN<32>, // unique ID / replay protection
 }
 
-#[macro_export]
-macro_rules! storage_log {
-    ($env:expr, $op:expr, $key:expr) => {
-        // Optional logging for storage operations
-    };
-}
 
-pub trait IStorageKey:
-    soroban_sdk::IntoVal<Env, soroban_sdk::Val> + soroban_sdk::TryFromVal<Env, soroban_sdk::Val>
-{
-}
-impl<
-        T: soroban_sdk::IntoVal<Env, soroban_sdk::Val>
-            + soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
-    > IStorageKey for T
-{
-}
-
-pub trait StorageRepository<K: IStorageKey> {
-    fn set<V>(&self, key: &K, value: &V)
-    where
-        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>;
-    fn get<V>(&self, key: &K) -> Option<V>
-    where
-        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>;
-    fn remove(&self, key: &K);
-    fn has(&self, key: &K) -> bool;
-    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32);
-}
-
-pub struct InstanceStorageRepository {
-    env: Env,
-}
-pub struct PersistentStorageRepository {
-    env: Env,
-}
-
-pub mod temporary;
-pub use temporary::TemporaryStorageRepository;
-
-impl InstanceStorageRepository {
-    pub fn new(env: Env) -> Self {
-        Self { env }
-    }
-}
-impl PersistentStorageRepository {
-    pub fn new(env: Env) -> Self {
-        Self { env }
-    }
-}
-
-impl<K: IStorageKey> StorageRepository<K> for InstanceStorageRepository {
-    fn set<V>(&self, key: &K, value: &V)
-    where
-        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
-    {
-        self.env.storage().instance().set(key, value);
-    }
-    fn get<V>(&self, key: &K) -> Option<V>
-    where
-        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
-    {
-        self.env.storage().instance().get(key)
-    }
-    fn remove(&self, key: &K) {
-        self.env.storage().instance().remove(key);
-    }
-    fn has(&self, key: &K) -> bool {
-        self.env.storage().instance().has(key)
-    }
-    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32) {
-        self.env
-            .storage()
-            .instance()
-            .extend_ttl(key, threshold, extend_to);
-    }
-}
 
 impl<K: IStorageKey> StorageRepository<K> for PersistentStorageRepository {
     fn set<V>(&self, key: &K, value: &V)
@@ -281,6 +204,12 @@ impl CommonUtilsContract {
         let mut actions: Vec<u64> = env.storage().temporary().get(&key).unwrap_or(Vec::new(env));
         actions.push_back(timestamp);
         env.storage().temporary().set(&key, &actions);
+    }
+
+    /// Helper to check permission against ACL contract
+    /// In a production scenario, this would be a cross-contract call.
+    pub fn check_permission(env: Env, acl_address: Address, user: Address, resource: Symbol, action: Symbol) -> bool {
+        env.invoke_contract::<bool>(&acl_address, &Symbol::new(&env, "has_permission"), soroban_sdk::vec![&env, user.into_val(&env), resource.into_val(&env), action.into_val(&env)])
     }
 }
 

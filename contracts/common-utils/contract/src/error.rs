@@ -489,14 +489,13 @@ impl ContractError for UnknownError {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum ContractErrorType {
-    Validation = 1000,
-    Authorization = 1100,
-    Storage = 1200,
-    Cryptographic = 1300,
-    State = 1400,
-    External = 1500,
-    TimeLock = 1600,
-    Unknown = 9999,
+    Validation(ValidationError),
+    Authorization(AuthorizationError),
+    Storage(StorageError),
+    Cryptographic(CryptoError),
+    State(StateError),
+    External(ExternalError),
+    Unknown(UnknownError),
 }
 
 /// Error context for providing additional information
