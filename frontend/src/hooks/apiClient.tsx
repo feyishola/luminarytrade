@@ -32,9 +32,13 @@ const BASE_URL =
 
 // ─── HTTP primitive ───────────────────────────────────────────────────────────
 
-async function get<T>(path: string): Promise<RawApiEnvelope<T>> {
+async function get<T>(path: string, accessToken?: string): Promise<RawApiEnvelope<T>> {
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -58,9 +62,10 @@ async function get<T>(path: string): Promise<RawApiEnvelope<T>> {
  */
 export async function fetchCreditScore(
   userId: string,
+  accessToken?: string,
 ): Promise<ApiResult<CreditScore>> {
   try {
-    const raw = await get<RawCreditScoreResponse>(`/scores/${userId}`);
+    const raw = await get<RawCreditScoreResponse>(`/scores/${userId}`, accessToken);
     return mapEnvelope(raw, creditScoreMapper);
   } catch (err) {
     return {
@@ -78,9 +83,10 @@ export async function fetchCreditScore(
  */
 export async function fetchFraudReport(
   userId: string,
+  accessToken?: string,
 ): Promise<ApiResult<FraudReport>> {
   try {
-    const raw = await get<RawFraudReportResponse>(`/fraud/${userId}`);
+    const raw = await get<RawFraudReportResponse>(`/fraud/${userId}`, accessToken);
     return mapEnvelope(raw, fraudReportMapper);
   } catch (err) {
     return {

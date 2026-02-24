@@ -5,6 +5,8 @@ import { IndexerService } from './indexer.service';
 import { Agent } from './entities/agent.entity';
 import { NotFoundException } from '@nestjs/common';
 import { SortOrder } from './dto/search-agent.dto';
+import { CacheManager } from '../cache/cache-manager.service';
+import { CacheInvalidator } from '../cache/cache-invalidator.service';
 
 describe('IndexerService', () => {
   let service: IndexerService;
@@ -21,11 +23,33 @@ describe('IndexerService', () => {
     is_active: true,
   };
 
+  let queryBuilder: any;
   const mockRepository = {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
-    createQueryBuilder: jest.fn(() => ({
+    createQueryBuilder: jest.fn(() => queryBuilder),
+  };
+
+  const mockCacheManager = {
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+    delPattern: jest.fn(),
+    reset: jest.fn(),
+    getOrSet: jest.fn(),
+    warm: jest.fn(),
+  };
+
+  const mockCacheInvalidator = {
+    invalidate: jest.fn(),
+    invalidateKeys: jest.fn(),
+    invalidateKey: jest.fn(),
+    invalidatePattern: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    queryBuilder = {
       andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
@@ -33,16 +57,22 @@ describe('IndexerService', () => {
       limit: jest.fn().mockReturnThis(),
       getManyAndCount: jest.fn(),
       getMany: jest.fn(),
-    })),
-  };
+    };
 
-  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IndexerService,
         {
           provide: getRepositoryToken(Agent),
           useValue: mockRepository,
+        },
+        {
+          provide: CacheManager,
+          useValue: mockCacheManager,
+        },
+        {
+          provide: CacheInvalidator,
+          useValue: mockCacheInvalidator,
         },
       ],
     }).compile();

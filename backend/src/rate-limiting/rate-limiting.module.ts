@@ -19,6 +19,13 @@ import { SystemLoadMiddleware } from './middleware/system-load.middleware';
     CacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
+        const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+        if (nodeEnv === 'test') {
+          return {
+            ttl: 60000,
+          };
+        }
+
         const redisHost = configService.get<string>('REDIS_HOST', 'localhost');
         const redisPort = configService.get<number>('REDIS_PORT', 6379);
         const redisPassword = configService.get<string>('REDIS_PASSWORD');

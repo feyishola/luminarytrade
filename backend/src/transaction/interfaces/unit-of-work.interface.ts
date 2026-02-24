@@ -1,7 +1,7 @@
 import { EntityManager } from 'typeorm';
 
 export interface ICompensatableOperation {
-  execute(manager: EntityManager): Promise<void>;
+  execute(manager: EntityManager): Promise<any>;
   compensate(manager: EntityManager): Promise<void>;
   getName(): string;
 }

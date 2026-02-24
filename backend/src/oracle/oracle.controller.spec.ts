@@ -8,7 +8,18 @@ describe('OracleController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OracleController],
-      providers: [OracleService],
+      providers: [
+        {
+          provide: OracleService,
+          useValue: {
+            getLatest: jest.fn(),
+            getHistory: jest.fn(),
+            submitReport: jest.fn(),
+            getProviderStats: jest.fn(),
+            getProviders: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     controller = module.get<OracleController>(OracleController);

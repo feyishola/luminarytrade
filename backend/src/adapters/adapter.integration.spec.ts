@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AdapterRegistry } from '../registry/adapter.registry';
-import { AdapterFactory } from '../factory/adapter.factory';
-import { StellarWalletAdapter } from '../wallet/stellar-wallet.adapter';
-import { MockWalletAdapter } from '../mocks/mock-wallet.adapter';
-import { MockAIAdapter } from '../mocks/mock-ai.adapter';
-import { AIProvider } from '../interfaces/ai-model-adapter.interface';
-import { WalletProvider } from '../interfaces/wallet-adapter.interface';
-import { CircuitBreaker } from '../patterns/circuit-breaker';
-import { FallbackHandler } from '../patterns/fallback-handler';
+import { AdapterRegistry } from './registry/adapter.registry';
+import { AdapterFactory } from './factory/adapter.factory';
+import { StellarWalletAdapter } from './wallet/stellar-wallet.adapter';
+import { MockWalletAdapter } from './mocks/mock-wallet.adapter';
+import { MockAIAdapter } from './mocks/mock-ai.adapter';
+import { AIProvider } from './interfaces/ai-model-adapter.interface';
+import { WalletProvider } from './interfaces/wallet-adapter.interface';
+import { CircuitBreaker } from './patterns/circuit-breaker';
+import { FallbackHandler } from './patterns/fallback-handler';
 
 describe('Adapter Pattern Integration Tests', () => {
   let registry: AdapterRegistry;

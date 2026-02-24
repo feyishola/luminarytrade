@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EventStore } from '../event-store.service';
-import { EventStream, DomainEvent } from '../domain-events/domain-event.base';
-import { IEventBus } from '../interfaces/event-bus.interface';
+import { EventStore } from './event-store.service';
+import { EventStream, DomainEvent } from './domain-events/domain-event.base';
+import { IEventBus } from './interfaces/event-bus.interface';
 
 export interface ReplayOptions {
   fromVersion?: number;

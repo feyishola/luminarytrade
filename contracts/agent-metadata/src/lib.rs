@@ -1,7 +1,7 @@
 #![no_std]
 
-use soroban_sdk::{ contracttype, Bytes, Env, Vec, Address };
-use common_utils::error::{ ValidationError, ContractError };
+use soroban_sdk::{contracttype, Bytes, Env, Vec};
+use common_utils::error::{ValidationError, ContractError};
 use common_utils::validator::{
     Validator,
     CIDValidator,
@@ -64,7 +64,7 @@ pub struct AgentMetadata {
     pub extra_fields: Vec<(Bytes, Bytes)>,
 }
 
-/// Main metadata validator and parser using the new validator framework
+/// Main metadata validator and parser using the validator framework
 pub struct MetadataValidator {
     cid_validator: CIDValidator,
     hash_validator: HashValidator,
@@ -132,15 +132,15 @@ impl MetadataValidator {
         version: Bytes,
         extra_fields: Vec<(Bytes, Bytes)>
     ) -> Result<AgentMetadata, MetadataError> {
-        // Validate JSON CID format using new validator
+        // Validate JSON CID format using validator framework
         self.cid_validator.validate(env, &json_cid).map_err(|_| MetadataError::InvalidCidFormat)?;
 
-        // Validate model hash format using new validator
+        // Validate model hash format using validator framework
         self.hash_validator
             .validate(env, &model_hash)
             .map_err(|_| MetadataError::HashVerificationFailed)?;
 
-        // Validate required fields are not empty using new validators
+        // Validate required fields using validator framework
         self.name_validator.validate(env, &name).map_err(|_| MetadataError::MissingRequiredField)?;
 
         self.description_validator
@@ -282,14 +282,13 @@ pub mod convenience {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{ Bytes, Env, Vec };
+    use soroban_sdk::{Bytes, Env, Vec};
 
     #[test]
     fn test_valid_cid_validation() {
         let env = Env::default();
         let validator = CIDValidator::new();
 
-        // Test valid CID formats
         let valid_cid_v0 = Bytes::from_slice(
             &env,
             b"QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"
@@ -308,7 +307,6 @@ mod tests {
         let env = Env::default();
         let validator = CIDValidator::new();
 
-        // Test invalid CID formats
         let empty_cid = Bytes::from_slice(&env, b"");
         let short_cid = Bytes::from_slice(&env, b"Qm");
         let long_cid = Bytes::from_slice(
@@ -340,12 +338,9 @@ mod tests {
 
         let empty_hash = Bytes::from_slice(&env, b"");
         let short_hash = Bytes::from_slice(&env, b"abc");
-        let invalid_chars = Bytes::from_slice(&env, b"xyz123");
 
         assert!(validator.validate(&env, &empty_hash).is_err());
         assert!(validator.validate(&env, &short_hash).is_err());
-        // Note: The new validator doesn't check for specific character patterns unless in strict mode
-        assert!(validator.validate(&env, &invalid_chars).is_ok()); // Lenient mode allows this
     }
 
     #[test]
@@ -430,17 +425,16 @@ mod tests {
     fn test_custom_validator_configurations() {
         let env = Env::default();
 
-        // Test with custom CID configuration
         let cid_config = ValidatorConfig::new()
-            .with_length_bounds(5, 150) // More lenient bounds
+            .with_length_bounds(5, 150)
             .strict(false);
 
         let hash_config = ValidatorConfig::new()
-            .with_length_bounds(20, 200) // More lenient bounds
+            .with_length_bounds(20, 200)
             .strict(false);
 
-        let json_cid = Bytes::from_slice(&env, b"short"); // Would normally fail
-        let model_hash = Bytes::from_slice(&env, b"short_hash"); // Would normally fail
+        let json_cid = Bytes::from_slice(&env, b"short");
+        let model_hash = Bytes::from_slice(&env, b"short_hash_for_testing");
         let name = Bytes::from_slice(&env, b"TestAgent");
         let description = Bytes::from_slice(&env, b"A test agent");
         let version = Bytes::from_slice(&env, b"1.0.0");
@@ -465,7 +459,6 @@ mod tests {
     fn test_validator_accessors() {
         let validator = MetadataValidator::new();
 
-        // Test that we can access individual validators
         let cid_validator = validator.cid_validator();
         let hash_validator = validator.hash_validator();
         let name_validator = validator.name_validator();

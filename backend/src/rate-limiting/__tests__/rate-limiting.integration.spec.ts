@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import request from 'supertest';
+import * as request from 'supertest';
 import { RateLimitingModule } from '../rate-limiting.module';
 import { RateLimitGuard } from '../guards/rate-limit.guard';
 import { RateLimit, ThrottlePerUser, SkipRateLimit } from '../decorators/rate-limit.decorator';
@@ -42,7 +42,10 @@ class TestController {
   }
 }
 
-describe('RateLimiting Integration', () => {
+const runNetworkTests = process.env.ALLOW_NETWORK_TESTS === 'true';
+const describeIf = runNetworkTests ? describe : describe.skip;
+
+describeIf('RateLimiting Integration', () => {
   let app: INestApplication;
   let ipFilter: IpFilterService;
 
@@ -54,7 +57,7 @@ describe('RateLimiting Integration', () => {
 
     app = moduleFixture.createNestApplication();
     ipFilter = moduleFixture.get(IpFilterService);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {

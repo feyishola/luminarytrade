@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
-import { Action } from '../../common/constants/actions.enum';
+import { Action } from '../../common/constant/actions.enum';
 
 @Entity('permissions')
 @Index(['resource', 'action'], { unique: true })

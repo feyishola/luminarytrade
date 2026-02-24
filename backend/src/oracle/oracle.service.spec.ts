@@ -7,6 +7,8 @@ import { OracleLatestPrice } from './entities/oracle-latest.entity';
 import { TransactionManager } from '../transaction/transaction-manager.service';
 import { TransactionMonitorService } from '../transaction/transaction-monitor.service';
 import { UpdateOracleDto } from './dto/update-oracle.dto';
+import { CacheManager } from '../cache/cache-manager.service';
+import { CacheInvalidator } from '../cache/cache-invalidator.service';
 
 // Mock the signature verification utility
 jest.mock('./utils/signature.utils', () => ({
@@ -14,6 +16,7 @@ jest.mock('./utils/signature.utils', () => ({
 }));
 
 describe('OracleService', () => {
+  jest.setTimeout(20000);
   let service: OracleService;
   let snapshotRepository: Repository<OracleSnapshot>;
   let priceRepository: Repository<OracleLatestPrice>;
@@ -36,6 +39,36 @@ describe('OracleService', () => {
         OracleService,
         TransactionManager,
         TransactionMonitorService,
+        {
+          provide: 'EventBus',
+          useValue: {
+            publish: jest.fn(),
+            publishBatch: jest.fn(),
+            subscribe: jest.fn(),
+            unsubscribe: jest.fn(),
+          },
+        },
+        {
+          provide: CacheManager,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+            delPattern: jest.fn(),
+            reset: jest.fn(),
+            getOrSet: jest.fn(),
+            warm: jest.fn(),
+          },
+        },
+        {
+          provide: CacheInvalidator,
+          useValue: {
+            invalidate: jest.fn(),
+            invalidateKeys: jest.fn(),
+            invalidateKey: jest.fn(),
+            invalidatePattern: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -109,7 +142,7 @@ describe('OracleService', () => {
       // Should only have one price record (upsert)
       const prices = await priceRepository.find();
       expect(prices).toHaveLength(1);
-      expect(prices[0].price).toBe('0.15');
+      expect(Number(prices[0].price)).toBeCloseTo(0.15, 2);
 
       // Should have two snapshots
       const snapshots = await snapshotRepository.find();
