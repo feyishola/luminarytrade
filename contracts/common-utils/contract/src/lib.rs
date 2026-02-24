@@ -4,6 +4,7 @@ pub mod error;
 pub mod marketplace;
 pub mod marketplace_types;
 pub mod oracle_bridge;
+pub mod rate_limit;
 pub mod timelock;
 pub mod validator;
 pub mod storage;
@@ -249,3 +250,4 @@ mod timelock_tests;
 
 #[cfg(test)]
 mod batch_tests;
+mod rate_limit_tests;

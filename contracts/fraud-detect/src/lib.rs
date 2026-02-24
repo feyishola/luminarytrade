@@ -10,7 +10,8 @@ use common_utils::error::CommonError;
 use common_utils::migration::DataMigration;
 use common_utils::error::{AuthorizationError, StateError, ContractError};
 use common_utils::authorization::{IAuthorizable, RoleBasedAuth, Permission, PermissionCache, CachedAuth};
-use common_utils::{permission, auth, cached_auth, check_authorization};
+use common_utils::{permission, auth, cached_auth, check_authorization, rate_limit, rate_limit_adaptive};
+use common_utils::rate_limit::{RateLimiter, TrustTier};
 use common_utils::compression::{FraudReportCompressor, FraudReport};
 use common_utils::storage_optimization::{CompressedReportStorage, DataSeparator, DataTemperature};
 use common_utils::storage_monitoring::{StorageTracker, PerformanceMonitor};
@@ -136,6 +137,45 @@ impl FraudDetectContract {
         Ok(())
     }
 
+    /// Set a user's trust tier (Admin only)
+    pub fn set_user_trust_tier(
+        env: Env,
+        admin: Address,
+        user: Address,
+        tier: TrustTier,
+    ) -> Result<(), AuthorizationError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
+            return Err(AuthorizationError::NotAuthorized);
+        }
+        RateLimiter::set_trust_tier(&env, &user, &tier);
+        Ok(())
+    }
+
+    /// Update network load multiplier (Admin only)
+    pub fn set_network_load(
+        env: Env,
+        admin: Address,
+        load: u32,
+    ) -> Result<(), AuthorizationError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
+            return Err(AuthorizationError::NotAuthorized);
+        }
+        RateLimiter::set_network_load(&env, load);
+        Ok(())
+    }
+
     /// Submit a fraud score for an agent (Reporter only)
     pub fn submit_report(
         env: Env,
@@ -144,6 +184,11 @@ impl FraudDetectContract {
         score: u32,
     ) -> Result<(), CommonError> {
     ) -> Result<(), AuthorizationError> {
+        // Rate limit: 10 submissions per hour per user (adaptive)
+        rate_limit_adaptive!(env, reporter, "submit_rpt",
+            max: 10, window: 3600,
+            strategy: SlidingWindow, scope: PerUser);
+
         let auth = Self::get_auth(&env);
         check_authorization!(auth, &env, &reporter, permission!(Reporter));
         
@@ -206,6 +251,7 @@ impl FraudDetectContract {
     }
 
     /// Retrieve all fraud reports for a given agent ID
+    /// Rate-limited to 30 reads per hour per function (shared across users)
     pub fn get_reports(env: Env, agent_id: Symbol) -> Vec<FraudReport> {
         let _timer = PerformanceMonitor::start_timer(&env, &symbol_short!("get_reports"));
         
