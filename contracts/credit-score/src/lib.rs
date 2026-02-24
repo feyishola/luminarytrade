@@ -1,6 +1,8 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 use common_utils::error::{AuthorizationError, StateError, ValidationError, ContractError};
+use common_utils::{rate_limit, rate_limit_adaptive};
+use common_utils::rate_limit::{RateLimiter, TrustTier};
 use common_utils::storage_optimization::{ScoreStorage, DataSeparator, DataTemperature};
 use common_utils::storage_monitoring::{StorageTracker, PerformanceMonitor};
 use common_utils::data_migration::{DataMigrationManager, MigrationConfig, CompressionType};
@@ -28,6 +30,45 @@ impl CreditScoreContract {
         Ok(())
     }
 
+    /// Set a user's trust tier (Admin only)
+    pub fn set_user_trust_tier(
+        env: Env,
+        admin: Address,
+        user: Address,
+        tier: TrustTier,
+    ) -> Result<(), AuthorizationError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
+            return Err(AuthorizationError::NotAuthorized);
+        }
+        RateLimiter::set_trust_tier(&env, &user, &tier);
+        Ok(())
+    }
+
+    /// Update network load multiplier (Admin only)
+    pub fn set_network_load(
+        env: Env,
+        admin: Address,
+        load: u32,
+    ) -> Result<(), AuthorizationError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
+            return Err(AuthorizationError::NotAuthorized);
+        }
+        RateLimiter::set_network_load(&env, load);
+        Ok(())
+    }
+
     /// Calculate credit score for an account
     pub fn calculate_score(
         env: Env,
@@ -43,8 +84,13 @@ impl CreditScoreContract {
         Ok(500)
     }
 
-    /// Get credit score for an account
+    /// Get credit score for an account (rate-limited)
     pub fn get_score(env: Env, account_id: Address) -> Result<u32, AuthorizationError> {
+        // Rate limit: 60 reads per hour per user (adaptive)
+        rate_limit_adaptive!(env, account_id, "get_score",
+            max: 60, window: 3600,
+            strategy: TokenBucket, scope: PerUser);
+
         let _timer = PerformanceMonitor::start_timer(&env, &symbol_short!("get_score"));
         
         let result = ScoreStorage::get_score(&env, &account_id)
@@ -64,12 +110,16 @@ impl CreditScoreContract {
         Ok(result)
     }
 
-    /// Update credit score factors (Admin only)
+    /// Update credit score factors (Admin only, rate-limited)
     pub fn update_factors(
         env: Env,
         account_id: Address,
         factors: String,
     ) -> Result<(), AuthorizationError> {
+        // Rate limit: 20 updates per hour globally
+        rate_limit!(env, account_id, "upd_factor",
+            max: 20, window: 3600,
+            strategy: FixedWindow, scope: Global);
         let admin: Address = env
             .storage()
             .instance()
@@ -100,12 +150,16 @@ impl CreditScoreContract {
         Ok(())
     }
 
-    /// Set credit score for an account (Admin only)
+    /// Set credit score for an account (Admin only, rate-limited)
     pub fn set_score(
         env: Env,
         account_id: Address,
         score: u32,
     ) -> Result<(), AuthorizationError> {
+        // Rate limit: 30 score-sets per hour per user
+        rate_limit!(env, account_id, "set_score",
+            max: 30, window: 3600,
+            strategy: SlidingWindow, scope: PerUser);
         let admin: Address = env
             .storage()
             .instance()
