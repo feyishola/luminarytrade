@@ -14,6 +14,7 @@ pub mod migration;
 
 pub use error::CommonError;
 pub mod acl;
+pub mod batch;
 
 use soroban_sdk::{
     contract,
@@ -248,4 +249,5 @@ mod test_marketplace;
 mod timelock_tests;
 
 #[cfg(test)]
+mod batch_tests;
 mod rate_limit_tests;
