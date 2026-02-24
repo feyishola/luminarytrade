@@ -12,7 +12,10 @@
 //! - 1500-1599: External Errors
 //! - 9999: Unknown Error
 
-use soroban_sdk::{contracterror, symbol_short, Bytes, Env, Symbol};
+use soroban_sdk::{
+    contracterror, contracttype, panic_with_error, symbol_short, vec, Address, Bytes, Env, IntoVal,
+    String, Symbol, TryFromVal, Val, Vec,
+};
 
 /// Core trait for all contract errors
 pub trait ContractError: core::fmt::Debug + Copy + Clone {
@@ -486,14 +489,14 @@ impl ContractError for UnknownError {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum ContractErrorType {
-    Validation(ValidationError) = 1000,
-    Authorization(AuthorizationError) = 1100,
-    Storage(StorageError) = 1200,
-    Cryptographic(CryptoError) = 1300,
-    State(StateError) = 1400,
-    External(ExternalError) = 1500,
-    TimeLock(TimeLockError) = 1600,
-    Unknown(UnknownError) = 9999,
+    Validation = 1000,
+    Authorization = 1100,
+    Storage = 1200,
+    Cryptographic = 1300,
+    State = 1400,
+    External = 1500,
+    TimeLock = 1600,
+    Unknown = 9999,
 }
 
 /// Error context for providing additional information

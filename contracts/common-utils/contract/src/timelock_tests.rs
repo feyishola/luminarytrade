@@ -3,6 +3,7 @@
 use super::error::TimeLockError;
 use super::timelock::{DelayLevel, OperationCall, OperationStatus, TimeLock, TimeLockClient};
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger},
     vec, Address, Env, IntoVal, Symbol, Val,
 };

@@ -30,36 +30,110 @@ pub struct Attestation {
     pub attestation_hash: BytesN<32>, // unique ID / replay protection
 }
 
-use soroban_sdk::{contract, contractimpl, Env};
+#[macro_export]
+macro_rules! storage_log {
+    ($env:expr, $op:expr, $key:expr) => {
+        // Optional logging for storage operations
+    };
+}
 
-#[contract]
-pub struct EvolutionManager;
+pub trait IStorageKey:
+    soroban_sdk::IntoVal<Env, soroban_sdk::Val> + soroban_sdk::TryFromVal<Env, soroban_sdk::Val>
+{
+}
+impl<
+        T: soroban_sdk::IntoVal<Env, soroban_sdk::Val>
+            + soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    > IStorageKey for T
+{
+}
 
-#[contractimpl]
-impl EvolutionManager {
-    pub fn emit_evolution_completed(
-        env: Env,
-        agent: Address,
-        new_level: u32,
-        total_stake: i128,
-        attestation_hash: BytesN<32>,
-    ) {
-        env.events().publish(
-            ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash),
-        );
+pub trait StorageRepository<K: IStorageKey> {
+    fn set<V>(&self, key: &K, value: &V)
+    where
+        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>;
+    fn get<V>(&self, key: &K) -> Option<V>
+    where
+        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>;
+    fn remove(&self, key: &K);
+    fn has(&self, key: &K) -> bool;
+    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32);
+}
+
+pub struct InstanceStorageRepository {
+    env: Env,
+}
+pub struct PersistentStorageRepository {
+    env: Env,
+}
+
+pub mod temporary;
+pub use temporary::TemporaryStorageRepository;
+
+impl InstanceStorageRepository {
+    pub fn new(env: Env) -> Self {
+        Self { env }
+    }
+}
+impl PersistentStorageRepository {
+    pub fn new(env: Env) -> Self {
+        Self { env }
     }
 }
 
-use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Bytes, Env,
-    Symbol, Vec,
-};
+impl<K: IStorageKey> StorageRepository<K> for InstanceStorageRepository {
+    fn set<V>(&self, key: &K, value: &V)
+    where
+        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().instance().set(key, value);
+    }
+    fn get<V>(&self, key: &K) -> Option<V>
+    where
+        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().instance().get(key)
+    }
+    fn remove(&self, key: &K) {
+        self.env.storage().instance().remove(key);
+    }
+    fn has(&self, key: &K) -> bool {
+        self.env.storage().instance().has(key)
+    }
+    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32) {
+        self.env
+            .storage()
+            .instance()
+            .extend_ttl(key, threshold, extend_to);
+    }
+}
 
-pub use storage::{
-    IStorageKey, InstanceStorageRepository, PersistentStorageRepository, StorageRepository,
-    TemporaryStorageRepository,
-};
+impl<K: IStorageKey> StorageRepository<K> for PersistentStorageRepository {
+    fn set<V>(&self, key: &K, value: &V)
+    where
+        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().set(key, value);
+    }
+    fn get<V>(&self, key: &K) -> Option<V>
+    where
+        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().get(key)
+    }
+    fn remove(&self, key: &K) {
+        self.env.storage().persistent().remove(key);
+    }
+    fn has(&self, key: &K) -> bool {
+        self.env.storage().persistent().has(key)
+    }
+    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32) {
+        self.env
+            .storage()
+            .persistent()
+            .extend_ttl(key, threshold, extend_to);
+    }
+}
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
