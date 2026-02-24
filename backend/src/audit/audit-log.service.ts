@@ -5,6 +5,7 @@ import { AuditLogEntity, AuditEventType } from './entities/audit-log.entity';
 import { FetchAuditLogsDto } from './dto/fetch-audit-logs.dto';
 import { IEventBus } from '../events/interfaces/event-bus.interface';
 import { AuditLogCreatedEvent } from '../events/domain-events/audit.events';
+import { Optional } from '@nestjs/common';
 
 @Injectable()
 export class AuditLogService {
@@ -13,8 +14,9 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLogEntity)
     private auditLogRepository: Repository<AuditLogEntity>,
+    @Optional()
     @Inject("EventBus")
-    private readonly eventBus: IEventBus,
+    private readonly eventBus?: IEventBus,
   ) {}
 
   async logEvent(
@@ -52,7 +54,9 @@ export class AuditLogService {
           relatedEntityType: saved.relatedEntityType,
         },
       );
-      await this.eventBus.publish(auditLogCreatedEvent);
+      if (this.eventBus) {
+        await this.eventBus.publish(auditLogCreatedEvent);
+      }
 
       return saved;
     } catch (error) {

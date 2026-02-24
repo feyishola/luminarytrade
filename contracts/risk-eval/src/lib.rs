@@ -5,6 +5,8 @@ use soroban_sdk::{
     Address, Bytes, BytesN, Env, Map, Symbol,
 };
 use common_utils::error::{AuthorizationError, CryptoError, ValidationError, ContractError};
+use common_utils::authorization::{IAuthorizable, SignatureBasedAuth, Permission, PermissionCache, CachedAuth};
+use common_utils::{permission, auth, cached_auth, check_authorization, verify_signature};
 
 /// -------------------------
 /// Storage Keys
@@ -94,6 +96,9 @@ impl RiskEvaluationContract {
         if !valid {
             return Err(CryptoError::SignatureVerificationFailed);
         }
+        
+        // Check custom permission for signature-based auth
+        check_authorization!(auth, &env, &attestation.agent, permission!(Custom(Symbol::new(&env, "signature"))));
 
         // Optional replay protection (basic)
         let now = env.ledger().timestamp();
@@ -120,6 +125,19 @@ impl RiskEvaluationContract {
         env.storage()
             .persistent()
             .get(&DataKey::Risk(agent))
+    }
+    
+    /// Get the authorization instance for this contract
+    fn get_auth(env: &Env) -> CachedAuth<SignatureBasedAuth> {
+        let sig_auth = auth!(SignatureBased, Symbol::new(env, "bridge_pubkey"));
+        let cache = PermissionCache::new(300, Symbol::new(env, "auth_cache"));
+        cached_auth!(sig_auth, cache)
+    }
+    
+    /// Verify a signature directly (utility method)
+    pub fn verify_signature_direct(env: Env, payload: Bytes, signature: BytesN<64>) -> Result<bool, CryptoError> {
+        let auth = Self::get_auth(&env);
+        auth.verify_signature(&env, &payload, &signature)
     }
 }
 

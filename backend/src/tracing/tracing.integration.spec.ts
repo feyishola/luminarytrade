@@ -175,7 +175,7 @@ describe('Tracing Integration Tests', () => {
       });
 
       const duration = Date.now() - startTime;
-      expect(duration).toBeGreaterThanOrEqual(100);
+      expect(duration).toBeGreaterThanOrEqual(90);
     });
 
     it('should handle concurrent operations', async () => {

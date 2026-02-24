@@ -5,7 +5,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AIResultEntity } from '../../compute-bridge/entities/ai-result-entity';
 import { ConfigService } from '@nestjs/config';
 import { AuditLogService } from '../../audit/audit-log.service';
-import { AIProviderFactory } from '../../compute-bridge/provider/ai-provider.factory';
+import { AdapterFactory } from '../../adapters/factory/adapter.factory';
+import { AdapterRegistry } from '../../adapters/registry/adapter.registry';
 import { NestEventBus } from '../nest-event-bus.service';
 import { AIResultCreatedEvent } from '../domain-events/ai-result.events';
 
@@ -40,9 +41,17 @@ describe('AIOrchestrationService Integration', () => {
           },
         },
         {
-          provide: AIProviderFactory,
+          provide: AdapterFactory,
           useValue: {
-            createProvider: jest.fn(),
+            executeWalletOperationWithProtection: jest.fn(),
+            executeAIOperationWithProtection: jest.fn(),
+          },
+        },
+        {
+          provide: AdapterRegistry,
+          useValue: {
+            getAIAdapter: jest.fn(),
+            getWalletAdapter: jest.fn(),
           },
         },
         {

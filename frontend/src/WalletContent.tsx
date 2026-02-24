@@ -8,6 +8,14 @@
  *  - Reacting to wallet lifecycle events (account changed, disconnected)
  */
 
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   IWalletProvider,
   WalletAccount,

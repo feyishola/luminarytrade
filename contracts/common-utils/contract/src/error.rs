@@ -12,7 +12,10 @@
 //! - 1500-1599: External Errors
 //! - 9999: Unknown Error
 
-use soroban_sdk::{contracterror, symbol_short, Bytes, Env, Symbol};
+use soroban_sdk::{
+    contracterror, contracttype, panic_with_error, symbol_short, vec, Address, Bytes, Env, IntoVal,
+    String, Symbol, TryFromVal, Val, Vec,
+};
 
 /// Core trait for all contract errors
 pub trait ContractError: core::fmt::Debug + Copy + Clone {
@@ -43,6 +46,7 @@ pub enum ErrorCategory {
     Cryptographic,
     State,
     External,
+    TimeLock,
     Unknown,
 }
 
@@ -397,6 +401,62 @@ impl ContractError for ExternalError {
     }
 }
 
+/// Time-Lock errors (1600-1699)
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum TimeLockError {
+    /// Operation already executed
+    AlreadyExecuted = 1601,
+    /// Delay period not yet passed
+    NotReady = 1602,
+    /// Operation not found
+    OperationNotFound = 1603,
+    /// Unauthorized cancellation
+    UnauthorizedCancellation = 1604,
+    /// Operation already cancelled
+    AlreadyCancelled = 1605,
+    /// Invalid delay level
+    InvalidDelayLevel = 1606,
+    /// Emergency bypass failed
+    BypassFailed = 1607,
+    /// Insufficient signatures for bypass
+    InsufficientSignatures = 1608,
+    /// Operation has changed
+    OperationChanged = 1609,
+    /// Batching not supported
+    BatchingNotSupported = 1610,
+}
+
+impl ContractError for TimeLockError {
+    fn code(&self) -> u32 {
+        *self as u32
+    }
+
+    fn message(&self) -> &'static str {
+        match self {
+            TimeLockError::AlreadyExecuted => "Operation already executed",
+            TimeLockError::NotReady => "Delay period not yet passed",
+            TimeLockError::OperationNotFound => "Operation not found",
+            TimeLockError::UnauthorizedCancellation => "Unauthorized cancellation",
+            TimeLockError::AlreadyCancelled => "Operation already cancelled",
+            TimeLockError::InvalidDelayLevel => "Invalid delay level",
+            TimeLockError::BypassFailed => "Emergency bypass failed",
+            TimeLockError::InsufficientSignatures => "Insufficient signatures for bypass",
+            TimeLockError::OperationChanged => "Operation has changed since scheduling",
+            TimeLockError::BatchingNotSupported => "Operation batching not supported",
+        }
+    }
+
+    fn category(&self) -> ErrorCategory {
+        ErrorCategory::TimeLock
+    }
+
+    fn is_recoverable(&self) -> bool {
+        matches!(self, TimeLockError::NotReady)
+    }
+}
+
 /// Unknown error (9999)
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -494,10 +554,7 @@ pub mod helpers {
     }
 
     /// Ensure a condition is met with a custom error message
-    pub fn ensure_with_context<T, E, F>(
-        condition: bool,
-        error_fn: F,
-    ) -> Result<(), E>
+    pub fn ensure_with_context<T, E, F>(condition: bool, error_fn: F) -> Result<(), E>
     where
         F: FnOnce() -> E,
     {
@@ -537,6 +594,9 @@ pub mod helpers {
             ErrorCategory::External => {
                 ContractErrorType::External(unsafe { core::mem::transmute(error.code()) })
             }
+            ErrorCategory::TimeLock => {
+                ContractErrorType::TimeLock(unsafe { core::mem::transmute(error.code()) })
+            }
             ErrorCategory::Unknown => ContractErrorType::Unknown(UnknownError::Unknown),
         }
     }
@@ -547,34 +607,32 @@ pub mod registry {
     use super::*;
 
     /// Get all validation error codes
-    pub const VALIDATION_ERROR_CODES: &[u32] = &[
-        1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010,
-    ];
+    pub const VALIDATION_ERROR_CODES: &[u32] =
+        &[1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010];
 
     /// Get all authorization error codes
-    pub const AUTHORIZATION_ERROR_CODES: &[u32] = &[
-        1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110,
-    ];
+    pub const AUTHORIZATION_ERROR_CODES: &[u32] =
+        &[1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110];
 
     /// Get all storage error codes
-    pub const STORAGE_ERROR_CODES: &[u32] = &[
-        1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210,
-    ];
+    pub const STORAGE_ERROR_CODES: &[u32] =
+        &[1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210];
 
     /// Get all cryptographic error codes
-    pub const CRYPTO_ERROR_CODES: &[u32] = &[
-        1301, 1302, 1303, 1304, 1305, 1306, 1307, 1308, 1309, 1310,
-    ];
+    pub const CRYPTO_ERROR_CODES: &[u32] =
+        &[1301, 1302, 1303, 1304, 1305, 1306, 1307, 1308, 1309, 1310];
 
     /// Get all state error codes
-    pub const STATE_ERROR_CODES: &[u32] = &[
-        1401, 1402, 1403, 1404, 1405, 1406, 1407, 1408, 1409, 1410,
-    ];
+    pub const STATE_ERROR_CODES: &[u32] =
+        &[1401, 1402, 1403, 1404, 1405, 1406, 1407, 1408, 1409, 1410];
 
     /// Get all external error codes
-    pub const EXTERNAL_ERROR_CODES: &[u32] = &[
-        1501, 1502, 1503, 1504, 1505, 1506, 1507, 1508, 1509, 1510,
-    ];
+    pub const EXTERNAL_ERROR_CODES: &[u32] =
+        &[1501, 1502, 1503, 1504, 1505, 1506, 1507, 1508, 1509, 1510];
+
+    /// Get all Time-Lock error codes
+    pub const TIMELOCK_ERROR_CODES: &[u32] =
+        &[1601, 1602, 1603, 1604, 1605, 1606, 1607, 1608, 1609, 1610];
 
     /// Get error category for a code
     pub fn get_category(code: u32) -> ErrorCategory {
@@ -585,6 +643,7 @@ pub mod registry {
             1300..=1399 => ErrorCategory::Cryptographic,
             1400..=1499 => ErrorCategory::State,
             1500..=1599 => ErrorCategory::External,
+            1600..=1699 => ErrorCategory::TimeLock,
             _ => ErrorCategory::Unknown,
         }
     }
@@ -617,10 +676,7 @@ mod tests {
             AuthorizationError::NotAuthorized.category(),
             ErrorCategory::Authorization
         );
-        assert_eq!(
-            StorageError::KeyNotFound.category(),
-            ErrorCategory::Storage
-        );
+        assert_eq!(StorageError::KeyNotFound.category(), ErrorCategory::Storage);
     }
 
     #[test]
@@ -795,7 +851,10 @@ mod comprehensive_tests {
         assert!(helpers::ensure(false, ValidationError::InvalidFormat).is_err());
 
         // Test ok_or
-        assert_eq!(helpers::ok_or(Some(42), StorageError::KeyNotFound).unwrap(), 42);
+        assert_eq!(
+            helpers::ok_or(Some(42), StorageError::KeyNotFound).unwrap(),
+            42
+        );
         assert!(helpers::ok_or::<i32, _>(None, StorageError::KeyNotFound).is_err());
     }
 
@@ -807,5 +866,6 @@ mod comprehensive_tests {
         assert!((1300..=1399).contains(&CryptoError::InvalidSignature.code()));
         assert!((1400..=1499).contains(&StateError::ContractPaused.code()));
         assert!((1500..=1599).contains(&ExternalError::OracleUnavailable.code()));
+        assert!((1600..=1699).contains(&TimeLockError::AlreadyExecuted.code()));
     }
 }

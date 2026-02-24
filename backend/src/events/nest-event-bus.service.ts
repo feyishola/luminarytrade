@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DomainEvent } from '../domain-events/domain-event.base';
 import { IEventBus, IEventHandler, DeadLetterEvent, EventBusConfig } from '../interfaces/event-bus.interface';
-import { EventStore } from '../event-store.service';
+import { EventStore } from './event-store.service';
 
 @Injectable()
 export class NestEventBus implements IEventBus, OnModuleInit {

@@ -1,9 +1,10 @@
 #![no_std]
 
 pub mod error;
-pub mod oracle_bridge;
-pub mod marketplace_types;
 pub mod marketplace;
+pub mod marketplace_types;
+pub mod oracle_bridge;
+pub mod timelock;
 pub mod validator;
 pub mod acl;
 
@@ -41,13 +42,32 @@ pub struct Attestation {
 
 
 
-pub use storage::{
-    IStorageKey,
-    InstanceStorageRepository,
-    PersistentStorageRepository,
-    StorageRepository,
-    TemporaryStorageRepository,
-};
+impl<K: IStorageKey> StorageRepository<K> for PersistentStorageRepository {
+    fn set<V>(&self, key: &K, value: &V)
+    where
+        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().set(key, value);
+    }
+    fn get<V>(&self, key: &K) -> Option<V>
+    where
+        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().get(key)
+    }
+    fn remove(&self, key: &K) {
+        self.env.storage().persistent().remove(key);
+    }
+    fn has(&self, key: &K) -> bool {
+        self.env.storage().persistent().has(key)
+    }
+    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32) {
+        self.env
+            .storage()
+            .persistent()
+            .extend_ttl(key, threshold, extend_to);
+    }
+}
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -97,8 +117,12 @@ const RATE_LIMIT_MAX: u32 = 10;
 impl CommonUtilsContract {
     /// Initialize contract with admin.
     pub fn initialize(env: Env, admin: Address) {
-        env.storage().persistent().set(&Symbol::new(&env, "admin"), &admin);
-        env.storage().persistent().set(&Symbol::new(&env, "exec_cnt"), &0u64);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "admin"), &admin);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "exec_cnt"), &0u64);
     }
 
     /// Submit an agent action.
@@ -131,13 +155,15 @@ impl CommonUtilsContract {
         }
 
         env.storage().persistent().set(&execution_key, &execution);
-        env.storage().persistent().set(&Symbol::new(&env, "exec_cnt"), &execution_id);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "exec_cnt"), &execution_id);
 
         Self::update_rate_limit(&env, &agent, timestamp);
 
         env.events().publish(
             (Symbol::new(&env, "act_sub"),),
-            (execution_id, agent, action_type, timestamp)
+            (execution_id, agent, action_type, timestamp),
         );
 
         execution_id
@@ -149,7 +175,10 @@ impl CommonUtilsContract {
     }
 
     pub fn admin(env: Env) -> Address {
-        env.storage().persistent().get(&Symbol::new(&env, "admin")).unwrap()
+        env.storage()
+            .persistent()
+            .get(&Symbol::new(&env, "admin"))
+            .unwrap()
     }
 
     fn check_rate_limit(env: &Env, agent: &Address) {
@@ -194,14 +223,17 @@ impl EvolutionManager {
         agent: Address,
         new_level: u32,
         total_stake: i128,
-        attestation_hash: BytesN<32>
+        attestation_hash: BytesN<32>,
     ) {
         env.events().publish(
             ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash)
+            (agent, new_level, total_stake, attestation_hash),
         );
     }
 }
 
 #[cfg(test)]
 mod test_marketplace;
+
+#[cfg(test)]
+mod timelock_tests;

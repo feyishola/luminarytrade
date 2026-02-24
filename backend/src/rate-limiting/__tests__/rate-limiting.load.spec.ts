@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { Controller, Get } from '@nestjs/common';
-import request from 'supertest';
+import * as request from 'supertest';
 import { RateLimitingModule } from '../rate-limiting.module';
 import { RateLimit, RateLimitStrategy } from '../index';
 
@@ -26,7 +26,10 @@ class LoadTestController {
   }
 }
 
-describe('RateLimiting Load Tests', () => {
+const runNetworkTests = process.env.ALLOW_NETWORK_TESTS === 'true';
+const describeIf = runNetworkTests ? describe : describe.skip;
+
+describeIf('RateLimiting Load Tests', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -36,7 +39,7 @@ describe('RateLimiting Load Tests', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
