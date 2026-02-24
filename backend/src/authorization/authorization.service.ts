@@ -7,7 +7,7 @@ import { UserRole } from '../rbac/entities/user-role.entity';
 import { Policy } from '../rbac/entities/policy.entity';
 import { AuthorizationAudit } from '../rbac/entities/authorization-audit.entity';
 import { expandRoles } from '../common/utils/role-hierarchy.util';
-import { Action } from '../common/constants/actions.enum';
+import { Action } from '../common/constant/actions.enum';
 import { Cache } from 'cache-manager';
 import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';

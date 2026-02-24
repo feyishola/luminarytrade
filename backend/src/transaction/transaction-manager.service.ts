@@ -19,7 +19,29 @@ export class TransactionManager implements IUnitOfWork {
   constructor(private readonly dataSource: DataSource) {}
 
   registerHooks(hooks: TransactionHooks): void {
-    Object.assign(this.hooks, hooks);
+    (Object.keys(hooks) as (keyof TransactionHooks)[]).forEach((key) => {
+      const nextHook = hooks[key];
+      if (!nextHook) return;
+
+      const existing = this.hooks[key];
+      if (!existing) {
+        this.hooks[key] = nextHook;
+        return;
+      }
+
+      if (key === 'onRetry') {
+        this.hooks.onRetry = async (context, attempt, error) => {
+          await existing(context as any, attempt as any, error as any);
+          await nextHook(context as any, attempt as any, error as any);
+        };
+        return;
+      }
+
+      this.hooks[key] = async (context, metrics) => {
+        await (existing as any)(context, metrics);
+        await (nextHook as any)(context, metrics);
+      };
+    });
   }
 
   async begin(parentContext?: ITransactionContext): Promise<ITransactionContext> {
@@ -146,6 +168,7 @@ export class TransactionManager implements IUnitOfWork {
     this.metrics.set(contextId, metrics);
 
     let lastError: Error | undefined;
+    let failureCount = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -155,16 +178,19 @@ export class TransactionManager implements IUnitOfWork {
           isolationLevel,
           readOnly,
           contextId,
+          metrics,
         );
 
         metrics.success = true;
+        metrics.retryCount = failureCount;
         metrics.endTime = new Date();
         metrics.durationMs = Date.now() - startTime;
         
         return result;
       } catch (error) {
         lastError = error as Error;
-        metrics.retryCount = attempt;
+        failureCount = attempt + 1;
+        metrics.retryCount = failureCount;
         
         this.logger.warn(
           `Transaction ${contextId} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${lastError.message}`,
@@ -192,6 +218,7 @@ export class TransactionManager implements IUnitOfWork {
     metrics.durationMs = Date.now() - startTime;
     metrics.success = false;
     metrics.error = lastError?.message;
+    metrics.retryCount = Math.max(failureCount - 1, 0);
 
     throw lastError || new Error(`Transaction ${contextId} failed after ${maxRetries + 1} attempts`);
   }
@@ -202,6 +229,7 @@ export class TransactionManager implements IUnitOfWork {
     isolationLevel: IsolationLevel,
     readOnly: boolean,
     contextId: string,
+    metrics: TransactionMetrics,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
@@ -219,12 +247,42 @@ export class TransactionManager implements IUnitOfWork {
             this.activeContexts.set(contextId, context);
 
             try {
+              if (this.hooks.beforeBegin) {
+                await this.hooks.beforeBegin(context);
+              }
+              if (this.hooks.afterBegin) {
+                await this.hooks.afterBegin(context);
+              }
+
               const result = await work(context);
+              metrics.operationsCount = context.getOperations().length;
+
+              if (this.hooks.beforeCommit) {
+                await this.hooks.beforeCommit(context, metrics);
+              }
+
               context.markCompleted();
+
+              if (this.hooks.afterCommit) {
+                await this.hooks.afterCommit(context, metrics);
+              }
+
               return result;
             } catch (error) {
               // Execute compensation before throwing
+              metrics.success = false;
+              metrics.error = (error as Error).message;
+              metrics.operationsCount = context.getOperations().length;
+
+              if (this.hooks.beforeRollback) {
+                await this.hooks.beforeRollback(context, metrics);
+              }
+
               await context.executeCompensation();
+
+              if (this.hooks.afterRollback) {
+                await this.hooks.afterRollback(context, metrics);
+              }
               throw error;
             } finally {
               this.activeContexts.delete(contextId);

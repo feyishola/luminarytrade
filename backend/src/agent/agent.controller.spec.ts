@@ -1,17 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AgentController } from './agent.controller';
-import { AgentService } from './indexer.service';
+import { IndexerController } from './agent.controller';
+import { IndexerService } from './indexer.service';
 
 describe('AgentController', () => {
-  let controller: AgentController;
+  let controller: IndexerController;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AgentController],
-      providers: [AgentService],
+      controllers: [IndexerController],
+      providers: [
+        {
+          provide: IndexerService,
+          useValue: {},
+        },
+      ],
     }).compile();
 
-    controller = module.get<AgentController>(AgentController);
+    controller = module.get<IndexerController>(IndexerController);
   });
 
   it('should be defined', () => {

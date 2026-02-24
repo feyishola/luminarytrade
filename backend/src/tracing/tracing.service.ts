@@ -6,7 +6,8 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor, BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
   AlwaysOnSampler,
   ParentBasedSampler,
@@ -29,6 +30,16 @@ export class TracingService implements OnModuleInit {
     const serviceName = this.configService.get('SERVICE_NAME', 'chenaikit-backend');
     const serviceVersion = this.configService.get('SERVICE_VERSION', '0.1.0');
     const jaegerEndpoint = this.configService.get('JAEGER_ENDPOINT', 'http://localhost:14268/api/traces');
+    const tracingDisabled = this.configService.get('TRACING_DISABLED', 'false') === 'true';
+
+    if (environment === 'test' || tracingDisabled) {
+      const provider = new BasicTracerProvider();
+      provider.register({
+        contextManager: new AsyncLocalStorageContextManager().enable(),
+      });
+      this.tracer = api.trace.getTracer(serviceName, serviceVersion);
+      return;
+    }
 
     // Configure sampler based on environment
     const sampler = this.createSampler(environment);
@@ -91,6 +102,20 @@ export class TracingService implements OnModuleInit {
   }
 
   getTracer(): api.Tracer {
+    if (!this.tracer) {
+      const serviceName = this.configService.get('SERVICE_NAME', 'chenaikit-backend');
+      const serviceVersion = this.configService.get('SERVICE_VERSION', '0.1.0');
+      const environment = this.configService.get('NODE_ENV', 'development');
+
+      if (environment === 'test') {
+        const provider = new BasicTracerProvider();
+        provider.register({
+          contextManager: new AsyncLocalStorageContextManager().enable(),
+        });
+      }
+
+      this.tracer = api.trace.getTracer(serviceName, serviceVersion);
+    }
     return this.tracer;
   }
 
@@ -98,7 +123,7 @@ export class TracingService implements OnModuleInit {
    * Create a custom span for business logic
    */
   startSpan(name: string, options?: api.SpanOptions): api.Span {
-    return this.tracer.startSpan(name, options);
+    return this.getTracer().startSpan(name, options);
   }
 
   /**
@@ -211,6 +236,8 @@ export class TracingService implements OnModuleInit {
   }
 
   async onModuleDestroy() {
-    await this.sdk.shutdown();
+    if (this.sdk) {
+      await this.sdk.shutdown();
+    }
   }
 }

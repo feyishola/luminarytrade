@@ -1,27 +1,26 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { AIScoringSaga } from '../saga/ai-scoring.saga';
-import { NestEventBus } from '../nest-event-bus.service';
-import { AIResultCreatedEvent, AIResultCompletedEvent } from '../domain-events/ai-result.events';
+import { IEventBus } from '../interfaces/event-bus.interface';
 
 describe('AIScoringSaga', () => {
   let saga: AIScoringSaga;
-  let eventBus: NestEventBus;
+  let eventBus: IEventBus;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AIScoringSaga,
-        {
-          provide: NestEventBus,
-          useValue: {
-            publish: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+  const buildSaga = () => {
+    const resultId = 'test-result-id';
+    const userId = 'user-123';
+    const provider = 'openai';
+    const request = { data: 'test' };
+    return new AIScoringSaga(eventBus, resultId, userId, provider, request);
+  };
 
-    saga = module.get<AIScoringSaga>(AIScoringSaga);
-    eventBus = module.get<NestEventBus>(NestEventBus);
+  beforeEach(() => {
+    eventBus = {
+      publish: jest.fn(),
+      publishBatch: jest.fn(),
+      subscribe: jest.fn(),
+      unsubscribe: jest.fn(),
+    } as unknown as IEventBus;
+    saga = buildSaga();
   });
 
   it('should be defined', () => {
@@ -30,11 +29,6 @@ describe('AIScoringSaga', () => {
 
   describe('execute', () => {
     it('should execute all saga steps successfully', async () => {
-      const resultId = 'test-result-id';
-      const userId = 'user-123';
-      const provider = 'openai';
-      const request = { data: 'test' };
-
       jest.spyOn(eventBus, 'publish').mockResolvedValue();
 
       await saga.execute();
@@ -45,11 +39,6 @@ describe('AIScoringSaga', () => {
     });
 
     it('should handle step failures and compensate', async () => {
-      const resultId = 'test-result-id';
-      const userId = 'user-123';
-      const provider = 'openai';
-      const request = { data: 'test' };
-
       jest.spyOn(eventBus, 'publish').mockRejectedValue(new Error('Step failed'));
 
       await saga.execute();

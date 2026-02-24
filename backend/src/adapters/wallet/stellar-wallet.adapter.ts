@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair } from 'stellar-sdk';
 import {
   IWalletAdapter,
   WalletInfo,

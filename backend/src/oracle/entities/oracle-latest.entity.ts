@@ -1,5 +1,7 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
+const TIMESTAMP_TYPE = process.env.NODE_ENV === 'test' ? 'datetime' : 'timestamptz';
+
 @Entity({ name: 'oracle_latest_prices' })
 @Unique(['pair'])
 export class OracleLatestPrice {
@@ -15,12 +17,12 @@ export class OracleLatestPrice {
   @Column({ type: 'int' })
   decimals: number;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_TYPE })
   timestamp: Date;
 
   @Column({ type: 'uuid' })
   snapshotId: string;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ type: TIMESTAMP_TYPE })
   updatedAt: Date;
 }
