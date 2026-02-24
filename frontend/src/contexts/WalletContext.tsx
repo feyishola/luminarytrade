@@ -11,12 +11,12 @@ import {
 // Action Types
 type WalletAction =
   | { type: 'WALLET_CONNECT_START' }
-  | { type: 'WALLET_CONNECT_SUCCESS'; payload: { address: string; provider: WalletState['provider']; chainId: number } }
+  | { type: 'WALLET_CONNECT_SUCCESS'; payload: { address: string; provider: WalletState['provider']; chainId: number | null } }
   | { type: 'WALLET_CONNECT_FAILURE'; payload: string }
   | { type: 'WALLET_DISCONNECT' }
   | { type: 'WALLET_UPDATE_BALANCE'; payload: string }
   | { type: 'WALLET_UPDATE_NETWORK'; payload: WalletState['network'] }
-  | { type: 'WALLET_UPDATE_CHAIN_ID'; payload: number }
+  | { type: 'WALLET_UPDATE_CHAIN_ID'; payload: number | null }
   | { type: 'WALLET_ADD_TRANSACTION'; payload: Transaction }
   | { type: 'WALLET_UPDATE_TRANSACTION'; payload: { id: string; updates: Partial<Transaction> } }
   | { type: 'WALLET_ADD_TOKEN'; payload: Token }
@@ -189,27 +189,36 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
   // Listen for wallet events
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum) {
-      const handleAccountsChanged = (accounts: string[]) => {
+      const handleAccountsChanged = async (accountsInput: unknown) => {
+        const accounts = Array.isArray(accountsInput) ? (accountsInput as string[]) : [];
+
         if (accounts.length === 0) {
           dispatch({ type: 'WALLET_DISCONNECT' });
           localStorage.removeItem('walletAddress');
           localStorage.removeItem('walletProvider');
         } else if (accounts[0] !== state.address) {
+          const rawChainId = await window.ethereum!.request({ method: 'eth_chainId' });
+          const chainId =
+            typeof rawChainId === 'string' ? parseInt(rawChainId, 16) : null;
+
           // Account changed
           dispatch({
             type: 'WALLET_CONNECT_SUCCESS',
             payload: {
               address: accounts[0],
               provider: state.provider || 'metamask',
-              chainId: window.ethereum.chainId ? parseInt(window.ethereum.chainId, 16) : null,
+              chainId,
             },
           });
           localStorage.setItem('walletAddress', accounts[0]);
         }
       };
 
-      const handleChainChanged = (chainId: string) => {
-        const numericChainId = chainId ? parseInt(chainId, 16) : null;
+      const handleChainChanged = (chainIdInput: unknown) => {
+        const numericChainId =
+          typeof chainIdInput === 'string' && chainIdInput
+            ? parseInt(chainIdInput, 16)
+            : null;
         dispatch({ type: 'WALLET_UPDATE_CHAIN_ID', payload: numericChainId });
         
         // Update network based on chain ID
@@ -222,16 +231,21 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
         localStorage.setItem('walletNetwork', network);
       };
 
-      if (window.ethereum?.on && window.ethereum?.removeListener) {
-        window.ethereum.on('accountsChanged', handleAccountsChanged);
-        window.ethereum.on('chainChanged', handleChainChanged);
+      const onAccountsChanged = (...args: unknown[]) => {
+        void handleAccountsChanged(args[0]);
+      };
+      const onChainChanged = (...args: unknown[]) => {
+        handleChainChanged(args[0]);
+      };
+
+      if (window.ethereum?.on) {
+        window.ethereum.on('accountsChanged', onAccountsChanged);
+        window.ethereum.on('chainChanged', onChainChanged);
       }
 
       return () => {
-        if (window.ethereum.removeListener) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
-        }
+        window.ethereum?.removeListener('accountsChanged', onAccountsChanged);
+        window.ethereum?.removeListener('chainChanged', onChainChanged);
       };
     }
   }, [state.address, state.provider]);
@@ -245,9 +259,11 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
       let chainId: number | null = null;
 
       if (provider === 'metamask' && window.ethereum) {
-        accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        chainId = chainId ? parseInt(chainId, 16) : null;
+        const requestedAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        accounts = Array.isArray(requestedAccounts) ? (requestedAccounts as string[]) : [];
+
+        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        chainId = typeof chainIdHex === 'string' ? parseInt(chainIdHex, 16) : null;
       } else {
         // Handle other wallet providers (WalletConnect, Phantom, etc.)
         throw new Error(`${provider} is not yet supported`);
@@ -358,7 +374,7 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
       const txHash = await window.ethereum.request({
         method: 'eth_sendTransaction',
         params: [txParams],
-      });
+      }) as string;
 
       // Update transaction with hash
       dispatch({
@@ -373,15 +389,20 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
       const receipt = await window.ethereum.request({
         method: 'eth_getTransactionReceipt',
         params: [txHash],
-      });
+      }) as { status?: number | string; gasUsed?: string; blockNumber?: number };
+
+      const isConfirmed =
+        receipt?.status === 1 ||
+        receipt?.status === '1' ||
+        receipt?.status === '0x1';
 
       dispatch({
         type: 'WALLET_UPDATE_TRANSACTION',
         payload: {
           id: transactionId,
           updates: {
-            status: receipt.status === 1 ? 'confirmed' : 'failed',
-            gasUsed: receipt.gasUsed,
+            status: isConfirmed ? 'confirmed' : 'failed',
+            gasUsed: receipt?.gasUsed || '0',
             blockNumber: receipt.blockNumber,
           },
         },
@@ -407,7 +428,7 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
         params: [message, state.address],
       });
 
-      return signature;
+      return typeof signature === 'string' ? signature : String(signature);
     } catch (error: any) {
       const message = error.message || 'Message signing failed';
       dispatch({ type: 'WALLET_SET_ERROR', payload: message });
@@ -427,7 +448,8 @@ export const WalletProvider: React.FC<ContextProviderProps> = ({ children }) => 
         params: [state.address, 'latest'],
       });
 
-      const balanceInEth = parseInt(balance, 16) / Math.pow(10, 18);
+      const balanceHex = typeof balance === 'string' ? balance : '0x0';
+      const balanceInEth = parseInt(balanceHex, 16) / Math.pow(10, 18);
       dispatch({
         type: 'WALLET_UPDATE_BALANCE',
         payload: balanceInEth.toString(),
@@ -496,15 +518,3 @@ export const useWallet = (): WalletContextType => {
 
 // Export for testing
 export { WalletContext };
-
-// Type declarations for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-      on: (event: string, handler: (...args: any[]) => void) => void;
-      removeListener: (event: string, handler: (...args: any[]) => void) => void;
-      chainId?: string;
-    };
-  }
-}

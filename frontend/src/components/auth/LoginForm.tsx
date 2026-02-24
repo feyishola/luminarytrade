@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useWalletActions } from "../../hooks/useWalletActions";
+import { WalletType } from "../../providers/IWalletProvider";
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -11,7 +12,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const wallet = useWalletActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [walletType, setWalletType] = useState(wallet.availableWallets[0] ?? "metamask");
+  const [walletType, setWalletType] = useState<WalletType>(wallet.availableWallets[0] ?? "metamask");
   const [socialProvider, setSocialProvider] = useState("google");
   const [socialEmail, setSocialEmail] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -138,7 +139,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
           <div style={{ display: "flex", gap: 8 }}>
             <select
               value={walletType}
-              onChange={(event) => setWalletType(event.target.value)}
+              onChange={(event) => setWalletType(event.target.value as WalletType)}
               style={{ ...inputStyle, padding: "10px 12px" }}
             >
               {availableWallets.map((walletType) => (

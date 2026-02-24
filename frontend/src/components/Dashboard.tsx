@@ -15,6 +15,8 @@ import TransactionVolumeChart from './dashboard/TransactionVolumeChart';
 import AgentPerformanceChart from './dashboard/AgentPerformanceChart';
 import RiskDistributionChart from './dashboard/RiskDistributionChart';
 import { printDashboard } from '../utils/exportUtils';
+import { useResponsive } from '../hooks/useResponsive';
+import { spacing } from '../styles/theme';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -141,23 +143,24 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ cell, onClose }) => (
 const Dashboard: React.FC = () => {
   const { data, loading, error, timeWindow, setTimeWindow, refresh } = useDashboardData('7D');
   const [drillDownCell, setDrillDownCell] = useState<FraudHeatmapCell | null>(null);
+  const { isMobile, isTablet } = useResponsive();
 
   return (
     <div style={{
       fontFamily: "'Inter', 'IBM Plex Sans', system-ui, -apple-system, sans-serif",
       minHeight: '100vh',
       background: 'linear-gradient(180deg, #0f0f1a 0%, #151525 100%)',
-      padding: '28px 32px',
+      padding: isMobile ? `${spacing.md}px` : isTablet ? `${spacing.lg}px` : `${spacing.xl}px`,
       color: '#e2e8f0',
     }}>
       {/* Header */}
       <div style={{
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 28,
+        justifyContent: isMobile ? 'flex-start' : 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        marginBottom: spacing.xl,
         flexWrap: 'wrap',
-        gap: 16,
+        gap: spacing.md,
       }}>
         <div>
           <h1 style={{
@@ -236,9 +239,9 @@ const Dashboard: React.FC = () => {
       {data && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 16,
-          marginBottom: 24,
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: spacing.md,
+          marginBottom: spacing.lg,
         }}>
           <StatCard
             label="Total Transactions"
@@ -280,8 +283,12 @@ const Dashboard: React.FC = () => {
       {/* Chart Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))',
-        gap: 20,
+        gridTemplateColumns: isMobile
+          ? '1fr'
+          : isTablet
+            ? 'repeat(2, minmax(0, 1fr))'
+            : 'repeat(auto-fit, minmax(420px, 1fr))',
+        gap: spacing.lg,
       }}>
         <CreditScoreTrendChart
           data={data?.creditScoreTrend ?? []}

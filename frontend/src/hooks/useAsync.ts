@@ -135,7 +135,7 @@ export function useAsync<T, E = Error, Args extends any[] = any[]>(
   // Execute immediately if specified
   useEffect(() => {
     if (immediate) {
-      execute();
+      void execute(...([] as unknown as Args));
     }
   }, [immediate, execute]);
 

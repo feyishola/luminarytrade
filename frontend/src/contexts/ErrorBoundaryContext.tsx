@@ -175,15 +175,18 @@ interface ErrorBoundaryComponentProps {
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryComponentProps> {
   static contextType = ErrorBoundaryContext;
-  declare context: ErrorBoundaryContextType;
+  context!: React.ContextType<typeof ErrorBoundaryContext>;
 
   constructor(props: ErrorBoundaryComponentProps) {
     super(props);
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    const context = this.context;
+    if (!context) return;
+
     const errorBoundaryInfo: ErrorInfo = {
-      componentStack: errorInfo.componentStack,
+      componentStack: errorInfo.componentStack || '',
       errorBoundary: 'ErrorBoundary',
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
@@ -191,7 +194,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryComponentProps> 
     };
 
     // Set error in context
-    this.context.setError(error, errorBoundaryInfo);
+    context.setError(error, errorBoundaryInfo);
 
     // Call custom error handler if provided
     if (this.props.onError) {
@@ -199,18 +202,19 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryComponentProps> 
     }
 
     // Auto-report error
-    this.context.reportError(error, errorBoundaryInfo);
+    context.reportError(error, errorBoundaryInfo);
   }
 
   render() {
-    if (this.context.hasError) {
+    const context = this.context;
+    if (context?.hasError) {
       return this.props.fallback || (
         <ErrorFallback
-          error={this.context.error}
-          errorInfo={this.context.errorInfo}
-          onRetry={this.context.retry}
-          onReport={() => this.context.reportError(this.context.error!, this.context.errorInfo!)}
-          isReporting={this.context.isReporting}
+          error={context.error}
+          errorInfo={context.errorInfo}
+          onRetry={context.retry}
+          onReport={() => context.reportError(context.error!, context.errorInfo!)}
+          isReporting={context.isReporting}
         />
       );
     }

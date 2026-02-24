@@ -1,83 +1,136 @@
-import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import ProtectedRoute from './components/auth/ProtectedRoute';
-import AuthPage from './components/auth/AuthPage';
+import React, { Suspense, lazy } from "react";
+import { Routes, Route, Link } from "react-router-dom";
+import { Box, Button, Stack, Typography, useTheme } from "@mui/material";
+import { useAuth } from "./context/AuthContext";
+import AuthPage from "./components/auth/AuthPage";
+import { useResponsive } from "./hooks/useResponsive";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
-// Lazy load route components
-const Dashboard = lazy(() => import('./components/Dashboard'));
-const CreditScoring = lazy(() => import('./components/CreditScoring'));
-const FraudDetection = lazy(() => import('./components/FraudDetection'));
-const WalletInterface = lazy(() => import('./components/WalletInterface'));
-const TransactionPage = lazy(() => import('./components/TransactionPage'));
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const CreditScoring = lazy(() => import("./components/CreditScoring"));
+const FraudDetection = lazy(() => import("./components/FraudDetection"));
+const WalletInterface = lazy(() => import("./components/WalletInterface"));
+const TransactionPage = lazy(() => import("./components/TransactionPage"));
+const ResponsiveExamples = lazy(
+  () => import("./components/examples/ResponsiveComponentExamples"),
+);
 
-// Loading fallback component
 const Loading: React.FC = () => (
-  <div style={{ padding: '20px', textAlign: 'center' }}>
-    <div className="loader">Loading...</div>
-  </div>
+  <Box sx={{ py: 6, textAlign: "center" }}>
+    <Typography variant="body1">Loading...</Typography>
+  </Box>
 );
 
 const App: React.FC = () => {
   const { user, logout } = useAuth();
+  const theme = useTheme();
+  const { isMobile } = useResponsive();
 
-  // Prefetch component on hover
-  const prefetchComponent = (componentName: string) => {
-    switch (componentName) {
-      case 'dashboard': import('./components/Dashboard'); break;
-      case 'scoring': import('./components/CreditScoring'); break;
-      case 'fraud': import('./components/FraudDetection'); break;
-      case 'wallet': import('./components/WalletInterface'); break;
-      case 'transactions': import('./components/TransactionPage'); break;
-    }
-  };
+  const navLinks = [
+    {
+      to: "/",
+      label: "Dashboard",
+      prefetch: () => import("./components/Dashboard"),
+    },
+    {
+      to: "/scoring",
+      label: "Credit Scoring",
+      prefetch: () => import("./components/CreditScoring"),
+    },
+    {
+      to: "/fraud",
+      label: "Fraud Detection",
+      prefetch: () => import("./components/FraudDetection"),
+    },
+    {
+      to: "/wallet",
+      label: "Wallet",
+      prefetch: () => import("./components/WalletInterface"),
+    },
+    {
+      to: "/transactions",
+      label: "Transactions",
+      prefetch: () => import("./components/TransactionPage"),
+    },
+    {
+      to: "/responsive-examples",
+      label: "Responsive Examples",
+      prefetch: () =>
+        import("./components/examples/ResponsiveComponentExamples"),
+    },
+  ];
 
   return (
-    <div className="app-container">
-      <nav style={{ padding: '20px', borderBottom: '1px solid #ccc' }}>
-        <ul style={{ display: 'flex', gap: '20px', listStyle: 'none', margin: 0, padding: 0, alignItems: 'center' }}>
-          <li>
-            <Link to="/" onMouseEnter={() => prefetchComponent('dashboard')}>Dashboard</Link>
-          </li>
-          <li>
-            <Link to="/scoring" onMouseEnter={() => prefetchComponent('scoring')}>Credit Scoring</Link>
-          </li>
-          <li>
-            <Link to="/fraud" onMouseEnter={() => prefetchComponent('fraud')}>Fraud Detection</Link>
-          </li>
-          <li>
-            <Link to="/wallet" onMouseEnter={() => prefetchComponent('wallet')}>Wallet</Link>
-          </li>
-          <li>
-            <Link to="/transactions" onMouseEnter={() => prefetchComponent('transactions')}>Transactions</Link>
-          </li>
-          <li style={{ marginLeft: 'auto' }}>
+    <Box sx={{ minHeight: "100vh", backgroundColor: "background.default" }}>
+      <Box
+        component="nav"
+        sx={{
+          px: { xs: 2, sm: 3, md: 4 },
+          py: 2,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          backgroundColor: "background.paper",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Stack
+          direction={isMobile ? "column" : "row"}
+          spacing={2}
+          alignItems={isMobile ? "flex-start" : "center"}
+        >
+          <Stack
+            direction={isMobile ? "column" : "row"}
+            spacing={2}
+            alignItems={isMobile ? "flex-start" : "center"}
+            flexWrap="wrap"
+          >
+            {navLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                onMouseEnter={link.prefetch}
+                style={{
+                  color: theme.palette.primary.main,
+                  textDecoration: "none",
+                  fontSize: theme.typography.body2.fontSize as string,
+                  fontWeight: 600,
+                }}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </Stack>
+
+          <Box sx={{ marginLeft: isMobile ? 0 : "auto" }}>
             {user ? (
-              <button onClick={() => void logout()} style={{
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: '1px solid #cbd5f5',
-                background: '#eef2ff',
-                color: '#4338ca',
-                cursor: 'pointer',
-              }}>
+              <Button
+                variant="outlined"
+                onClick={() => void logout()}
+                size="small"
+              >
                 Logout
-              </button>
+              </Button>
             ) : (
-              <div style={{ display: 'flex', gap: 12 }}>
+              <Stack direction="row" spacing={1.5}>
                 <Link to="/login">Login</Link>
                 <Link to="/signup">Sign up</Link>
-              </div>
+              </Stack>
             )}
-          </li>
-        </ul>
-      </nav>
+          </Box>
+        </Stack>
+      </Box>
 
-      <main style={{ padding: '20px' }}>
+      <Box
+        component="main"
+        sx={{ px: { xs: 2, sm: 3, md: 4 }, py: { xs: 2, sm: 3 } }}
+      >
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/login" element={<AuthPage mode="login" />} />
             <Route path="/signup" element={<AuthPage mode="signup" />} />
+
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/scoring" element={<CreditScoring />} />
@@ -85,10 +138,14 @@ const App: React.FC = () => {
               <Route path="/wallet" element={<WalletInterface />} />
               <Route path="/transactions" element={<TransactionPage />} />
             </Route>
+            <Route
+              path="/responsive-examples"
+              element={<ResponsiveExamples />}
+            />
           </Routes>
         </Suspense>
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 };
 

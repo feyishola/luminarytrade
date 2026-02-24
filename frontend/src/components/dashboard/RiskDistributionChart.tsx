@@ -5,7 +5,7 @@
  * with custom labels, active-sector enlargement, and legend.
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
     ResponsiveContainer,
     PieChart,
@@ -59,8 +59,6 @@ const renderActiveShape = (props: any) => {
 };
 
 const RiskDistributionChart: React.FC<Props> = ({ data, loading }) => {
-    const [activeIndex, setActiveIndex] = useState(0);
-
     const csvColumns = [
         { key: 'name', label: 'Risk Level' },
         { key: 'value', label: 'Count' },
@@ -81,15 +79,12 @@ const RiskDistributionChart: React.FC<Props> = ({ data, loading }) => {
             <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                     <Pie
-                        activeIndex={activeIndex}
-                        activeShape={renderActiveShape}
                         data={data}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
                         outerRadius={90}
                         dataKey="value"
-                        onMouseEnter={(_, index) => setActiveIndex(index)}
                         animationBegin={0}
                         animationDuration={1000}
                         animationEasing="ease-out"
