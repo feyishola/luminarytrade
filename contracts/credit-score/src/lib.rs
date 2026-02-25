@@ -12,6 +12,8 @@ use common_utils::dex::trading_data::{TradingData, TradingVolume, PriceData};
 use common_utils::dex::liquidity::{LiquidityMetrics, PoolInfo};
 use common_utils::dex::scoring_signals::{SignalAggregator, ScoringSignal, SignalType, SignalWeight};
 use common_utils::dex::cache::{DexDataCache, CacheConfig};
+use common_utils::state_machine::{State, StateMachine, CreditScoreState};
+use common_utils::{state_guard, transition_to};
 
 #[contracttype]
 pub enum DataKey {
@@ -24,17 +26,43 @@ pub enum DataKey {
     TradingDataCache(TokenPair),
     ScoreSignals(Address),
     DexEnabled,
+    ContractState,
 }
 
 #[contract]
 pub struct CreditScoreContract;
 
+impl StateMachine<CreditScoreState> for CreditScoreContract {
+    fn get_state(env: &Env) -> State<CreditScoreState> {
+        env.storage()
+            .instance()
+            .get(&DataKey::ContractState)
+            .unwrap_or(State::Uninitialized)
+    }
+
+    fn set_state(env: &Env, state: State<CreditScoreState>) {
+        env.storage().instance().set(&DataKey::ContractState, &state);
+    }
+}
+
 #[contractimpl]
 impl CreditScoreContract {
     pub fn initialize(env: Env, admin: Address) -> Result<(), StateError> {
-        if env.storage().instance().has(&DataKey::Admin) {
+        // Ensure contract is uninitialized
+        let current_state = Self::get_state(&env);
+        if !current_state.is_uninitialized() {
             return Err(StateError::AlreadyInitialized);
         }
+
+        // Transition to Active state
+        let initial_state = State::Active(CreditScoreState {
+            admin: admin.clone(),
+            total_scores: 0,
+        });
+        
+        transition_to!(Self, &env, initial_state)?;
+        
+        // Store admin for backward compatibility
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::DexEnabled, &true);
         

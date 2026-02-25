@@ -11,9 +11,11 @@ pub mod storage;
 pub mod upgrade_registry;
 pub mod upgrade_proxy;
 pub mod migration;
+pub mod state_machine;
 pub mod dex;
 
 pub use error::CommonError;
+pub use state_machine::{State, StateMachine, FraudDetectState, RiskEvalState, CreditScoreState, state_guard, transition_to};
 pub mod acl;
 pub mod batch;
 
@@ -251,4 +253,9 @@ mod timelock_tests;
 
 #[cfg(test)]
 mod batch_tests;
+
+#[cfg(test)]
 mod rate_limit_tests;
+
+#[cfg(test)]
+mod state_machine_tests;

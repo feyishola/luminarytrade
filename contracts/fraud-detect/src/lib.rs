@@ -26,6 +26,8 @@ use common_utils::storage_optimization::{CompressedReportStorage, DataSeparator,
 use common_utils::{
     auth, cached_auth, check_authorization, permission, rate_limit, rate_limit_adaptive,
 };
+use common_utils::state_machine::{State, StateMachine, FraudDetectState};
+use common_utils::{state_guard, transition_to};
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, Address, Bytes, Env, String, Symbol,
     TryFromVal, Val, Vec,
@@ -44,6 +46,7 @@ pub enum DataKey {
     FraudIndicators(Symbol),
     DetectionThresholds,
     TradingPatternHistory(Symbol),
+    ContractState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,12 +60,38 @@ pub struct FraudReport {
 #[contract]
 pub struct FraudDetectContract;
 
+impl StateMachine<FraudDetectState> for FraudDetectContract {
+    fn get_state(env: &Env) -> State<FraudDetectState> {
+        env.storage()
+            .instance()
+            .get(&DataKey::ContractState)
+            .unwrap_or(State::Uninitialized)
+    }
+
+    fn set_state(env: &Env, state: State<FraudDetectState>) {
+        env.storage().instance().set(&DataKey::ContractState, &state);
+    }
+}
+
 #[contractimpl]
 impl FraudDetectContract {
     pub fn initialize(env: Env, admin: Address, acl_contract: Address) -> Result<(), StateError> {
-        if env.storage().instance().has(&DataKey::Admin) {
+        // Ensure contract is uninitialized
+        let current_state = Self::get_state(&env);
+        if !current_state.is_uninitialized() {
             return Err(StateError::AlreadyInitialized);
         }
+
+        // Transition to Active state
+        let initial_state = State::Active(FraudDetectState {
+            admin: admin.clone(),
+            acl_contract: acl_contract.clone(),
+            total_reports: 0,
+        });
+        
+        transition_to!(Self, &env, initial_state)?;
+        
+        // Store admin and ACL for backward compatibility
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
