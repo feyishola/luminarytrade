@@ -11,9 +11,10 @@ import { ComputeBridgeModule } from './compute-bridge/compute-bridge.module';
 import { IndexerModule } from './agent/agent.module';
 import { AuditLogModule } from './audit/audit-log.module';
 import { WorkerModule } from './worker/worker.module';
+import { MaterializedViewModule } from './materialized-view/materialized-view.module';
 
 @Module({
-  imports: [SimulatorModule, OracleModule],
+  imports: [SimulatorModule, OracleModule, MaterializedViewModule],
   controllers: [AppController],
 })
 export class AppModule {}
