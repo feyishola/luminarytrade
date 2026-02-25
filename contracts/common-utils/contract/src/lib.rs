@@ -11,6 +11,7 @@ pub mod storage;
 pub mod upgrade_registry;
 pub mod upgrade_proxy;
 pub mod migration;
+pub mod dex;
 
 pub use error::CommonError;
 pub mod acl;
