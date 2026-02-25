@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testRegex": ".*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverageFrom": [
+    "aggregate/**/*.(t|j)s",
+    "!aggregate/**/*.module.ts",
+    "!aggregate/**/index.ts"
+  ],
+  "coverageDirectory": "./coverage",
+  "testEnvironment": "node",
+  "moduleNameMapper": {
+    "^uuid$": "<rootDir>/node_modules/uuid/dist/cjs/index.js"
+  }
+}

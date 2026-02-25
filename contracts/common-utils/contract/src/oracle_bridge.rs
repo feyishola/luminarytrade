@@ -1,17 +1,8 @@
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, Symbol, Address, Bytes, Env, 
-    contracterror, contracttype,
+    contract, contractimpl, Address, Bytes, Env, 
+    contracttype, symbol_short,
 };
-
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub enum Error {
-    Unauthorized = 1,
-    OracleAlreadyExists = 2,
-    OracleNotFound = 3,
-    RequestNotFound = 4,
-    RequestAlreadyFulfilled = 5,
-}
+use crate::error::CommonError;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,27 +21,27 @@ pub struct OracleBridgeContract;
 
 #[contractimpl]
 impl OracleBridgeContract {
-    // RENAMED from initialize to init_oracle
-    pub fn init_oracle(env: Env, admin: Address) {
-        env.storage().persistent().set(&Symbol::new(&env, "admin"), &admin);
-        env.storage().persistent().set(&Symbol::new(&env, "req_cnt"), &0u64);
+    pub fn initialize(env: Env, admin: Address) {
+        env.storage().instance().set(&symbol_short!("admin"), &admin);
+        env.storage().instance().set(&symbol_short!("req_cnt"), &0u64);
     }
 
-    pub fn add_oracle(env: Env, oracle: Address) {
-        let admin: Address = env.storage().persistent().get(&Symbol::new(&env, "admin")).unwrap();
+    pub fn add_oracle(env: Env, oracle: Address) -> Result<(), CommonError> {
+        let admin: Address = env.storage().instance().get(&symbol_short!("admin")).unwrap();
         admin.require_auth();
 
-        let key = (Symbol::new(&env, "oracle"), oracle.clone());
+        let key = (symbol_short!("oracle"), oracle.clone());
         if env.storage().persistent().has(&key) {
-            panic_with_error!(&env, Error::OracleAlreadyExists);
+            return Err(CommonError::OracleAlreadyExists);
         }
         env.storage().persistent().set(&key, &true);
+        Ok(())
     }
 
     pub fn request_data(env: Env, requester: Address, data_type: u32, params: Bytes) -> u64 {
         requester.require_auth();
 
-        let counter: u64 = env.storage().persistent().get(&Symbol::new(&env, "req_cnt")).unwrap_or(0);
+        let counter: u64 = env.storage().instance().get(&symbol_short!("req_cnt")).unwrap_or(0);
         let request_id = counter + 1;
 
         let request = OracleRequest {
@@ -63,41 +54,41 @@ impl OracleBridgeContract {
             timestamp: env.ledger().timestamp(),
         };
 
-        let key = (Symbol::new(&env, "request"), request_id);
+        let key = (symbol_short!("request"), request_id);
         env.storage().persistent().set(&key, &request);
-        env.storage().persistent().set(&Symbol::new(&env, "req_cnt"), &request_id);
+        env.storage().instance().set(&symbol_short!("req_cnt"), &request_id);
 
-        env.events().publish((Symbol::new(&env, "req_created"),), (request_id, requester, data_type));
+        env.events().publish((symbol_short!("req_cre"),), (request_id, requester, data_type));
 
         request_id
     }
 
-    pub fn fulfill_request(env: Env, oracle: Address, request_id: u64, result: Bytes) {
+    pub fn fulfill_request(env: Env, oracle: Address, request_id: u64, result: Bytes) -> Result<(), CommonError> {
         oracle.require_auth();
         
-        let oracle_key = (Symbol::new(&env, "oracle"), oracle.clone());
+        let oracle_key = (symbol_short!("oracle"), oracle.clone());
         if !env.storage().persistent().has(&oracle_key) {
-             panic_with_error!(&env, Error::Unauthorized);
+             return Err(CommonError::NotAuthorized);
         }
 
-        let req_key = (Symbol::new(&env, "request"), request_id);
-        let mut request: OracleRequest = env.storage().persistent().get(&req_key).unwrap_or_else(|| {
-             panic_with_error!(&env, Error::RequestNotFound);
-        });
+        let req_key = (symbol_short!("request"), request_id);
+        let mut request: OracleRequest = env.storage().persistent().get(&req_key).ok_or(CommonError::RequestNotFound)?;
 
         if request.fulfilled {
-            panic_with_error!(&env, Error::RequestAlreadyFulfilled);
+            return Err(CommonError::RequestAlreadyFulfilled);
         }
 
         request.fulfilled = true;
         request.result = result;
         
         env.storage().persistent().set(&req_key, &request);
-        env.events().publish((Symbol::new(&env, "req_filled"),), (request_id, oracle));
+        env.events().publish((symbol_short!("req_fil"),), (request_id, oracle));
+        
+        Ok(())
     }
     
     pub fn is_approved_oracle(env: Env, oracle: Address) -> bool {
-         let key = (Symbol::new(&env, "oracle"), oracle);
+         let key = (symbol_short!("oracle"), oracle);
          env.storage().persistent().has(&key)
     }
 }

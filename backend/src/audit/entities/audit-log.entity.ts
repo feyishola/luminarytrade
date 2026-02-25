@@ -1,6 +1,13 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
 
 export enum AuditEventType {
+  AUTH_LOGIN_SUCCESS = 'auth_login_success',
+  AUTH_LOGIN_FAILURE = 'auth_login_failure',
+  AUTH_LOGOUT = 'auth_logout',
+  AUTH_REFRESH = 'auth_refresh',
+  AUTH_TOKEN_REVOKED = 'auth_token_revoked',
+  AUTH_SIGNUP = 'auth_signup',
+  AUTH_EMAIL_VERIFIED = 'auth_email_verified',
   AI_SCORING_STARTED = 'ai_scoring_started',
   AI_SCORING_COMPLETED = 'ai_scoring_completed',
   AI_SCORING_FAILED = 'ai_scoring_failed',

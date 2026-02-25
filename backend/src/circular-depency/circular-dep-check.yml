@@ -1,0 +1,77 @@
+name: Circular Dependency Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/**/*.ts'
+      - 'package*.json'
+      - 'tsconfig*.json'
+
+jobs:
+  circular-deps:
+    name: Circular Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install madge (circular dep analyzer)
+        run: npm install --no-save madge
+
+      - name: Run circular dependency check
+        env:
+          CI: 'true'
+          MAX_CIRCULAR_DEPS: '0'
+          GENERATE_GRAPH: 'true'
+        run: node src/eslint/check-circular-deps.js
+
+      - name: Run ESLint import/no-cycle
+        run: npx eslint src --rule '{"import/no-cycle": ["error", {"maxDepth": 5}]}' --ext .ts
+        continue-on-error: false
+
+      - name: Upload dependency graph
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-graph
+          path: dependency-graph.svg
+          retention-days: 30
+        continue-on-error: true
+
+      - name: Comment PR with circular dep report
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Circular Dependency Detected
+              
+              This PR introduced a circular dependency. Please review the check output and:
+              
+              1. Run \`npm run dep:report\` locally for refactoring suggestions
+              2. Check the uploaded \`dependency-graph.svg\` artifact
+              3. Apply one of the documented refactoring strategies:
+                 - Introduce an intermediate service layer
+                 - Extract a shared domain concept
+                 - Reverse the dependency direction  
+                 - Use event-driven decoupling
+              
+              See \`docs/module-dependency-guide.md\` for the full developer guide.`
+            });

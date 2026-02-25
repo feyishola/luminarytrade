@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchCreditScore } from "./hooks/apiClient";
 import { CreditScore } from "./interfaces/domain";
+import { useAuth } from "./context/AuthContext";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -140,6 +141,7 @@ const CreditScoring: React.FC<CreditScoringProps> = ({ userId }) => {
   const [score, setScore] = useState<CreditScore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { accessToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +149,7 @@ const CreditScoring: React.FC<CreditScoringProps> = ({ userId }) => {
     setLoading(true);
     setError(null);
 
-    fetchCreditScore(userId).then((result) => {
+    fetchCreditScore(userId, accessToken ?? undefined).then((result) => {
       if (cancelled) return;
 
       if (result.ok) {

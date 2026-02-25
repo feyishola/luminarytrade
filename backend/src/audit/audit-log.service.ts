@@ -1,8 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between } from 'typeorm';
-import { AuditLogEntity, AuditEventType } from '../entities/audit-log.entity';
-import { FetchAuditLogsDto } from '../dto/fetch-audit-logs.dto';
+import { AuditLogEntity, AuditEventType } from './entities/audit-log.entity';
+import { FetchAuditLogsDto } from './dto/fetch-audit-logs.dto';
+import { IEventBus } from '../events/interfaces/event-bus.interface';
+import { AuditLogCreatedEvent } from '../events/domain-events/audit.events';
+import { Optional } from '@nestjs/common';
 
 @Injectable()
 export class AuditLogService {
@@ -11,6 +14,9 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLogEntity)
     private auditLogRepository: Repository<AuditLogEntity>,
+    @Optional()
+    @Inject("EventBus")
+    private readonly eventBus?: IEventBus,
   ) {}
 
   async logEvent(
@@ -35,6 +41,23 @@ export class AuditLogService {
       this.logger.log(
         `Audit log created: ${eventType} for wallet ${wallet}`,
       );
+
+      // Emit Audit Log Created Event
+      const auditLogCreatedEvent = new AuditLogCreatedEvent(
+        saved.id,
+        {
+          wallet: saved.wallet,
+          eventType: saved.eventType,
+          metadata: saved.metadata,
+          description: saved.description,
+          relatedEntityId: saved.relatedEntityId,
+          relatedEntityType: saved.relatedEntityType,
+        },
+      );
+      if (this.eventBus) {
+        await this.eventBus.publish(auditLogCreatedEvent);
+      }
+
       return saved;
     } catch (error) {
       this.logger.error(

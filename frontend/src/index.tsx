@@ -1,18 +1,11 @@
-// ChenAIKit Frontend Application
-// TODO: Implement frontend application - See frontend issues in .github/ISSUE_TEMPLATE/
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-
-const App: React.FC = () => {
-  return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h1>ChenAIKit Frontend</h1>
-      <p>Frontend implementation pending - see issue templates for contributors</p>
-      <p>Check .github/ISSUE_TEMPLATE/ for frontend development tasks</p>
-    </div>
-  );
-};
+import { BrowserRouter } from 'react-router-dom';
+import { CssBaseline, ThemeProvider } from '@mui/material';
+import App from './App';
+import { AuthProvider } from './context/AuthContext';
+import { WalletProvider } from './WalletContent';
+import { appTheme } from './styles/theme';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -20,6 +13,15 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider theme={appTheme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <AuthProvider>
+          <WalletProvider>
+            <App />
+          </WalletProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>
 );

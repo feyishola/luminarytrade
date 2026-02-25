@@ -1,9 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Between, In } from 'typeorm';
-import { Agent } from './entities/agent.entity';
-import { CreateAgentDto } from './dto/create-agent.dto';
-import { SearchAgentsDto, SortOrder } from './dto/search-agent.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, ILike, Between, In } from "typeorm";
+import { Agent } from "./entities/agent.entity";
+import { CreateAgentDto } from "./dto/create-agent.dto";
+import { SpecificationExecutor } from "./specification/specification.executor";
+import { AgentQuerySpecification } from "./specification/agent-query.specification";
+import { SearchAgentsDto } from "./dto/search-agent.dto";
+import { HighPerformerSpec } from "./specification/high-performer.specification";
+import { CacheManager } from "../cache/cache-manager.service";
+import { CacheInvalidator } from "../cache/cache-invalidator.service";
+import { Cacheable } from "../cache/decorators/cacheable.decorator";
+import { CacheInvalidate } from "../cache/decorators/cache-invalidate.decorator";
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -17,50 +24,39 @@ export interface PaginatedResponse<T> {
 
 @Injectable()
 export class IndexerService {
+  private readonly specificationExecutor: SpecificationExecutor<Agent>;
+
   constructor(
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
-  ) {}
+    private readonly cacheManager: CacheManager,
+    private readonly cacheInvalidator: CacheInvalidator,
+  ) {
+    this.specificationExecutor = new SpecificationExecutor(
+      this.agentRepository,
+    );
+  }
 
+  @CacheInvalidate({ rule: 'agent:create' })
   async create(createAgentDto: CreateAgentDto): Promise<Agent> {
     const agent = this.agentRepository.create(createAgentDto);
     return await this.agentRepository.save(agent);
   }
 
+  @Cacheable({
+    key: (searchDto: SearchAgentsDto) => 
+      `search:${JSON.stringify(searchDto)}`,
+    ttl: 300, // 5 minutes
+    namespace: 'agent',
+  })
   async search(searchDto: SearchAgentsDto): Promise<PaginatedResponse<Agent>> {
-    const { page, limit, sort_by, order, name, capabilities, evolution_level_min, evolution_level_max } = searchDto;
+    const spec = new AgentQuerySpecification(searchDto);
 
-    const queryBuilder = this.agentRepository.createQueryBuilder('agent');
+    const queryBuilder = this.specificationExecutor.execute(spec, "agent");
 
-    // Apply filters
-    if (name) {
-      queryBuilder.andWhere('agent.name ILIKE :name', { name: `%${name}%` });
-    }
-
-    if (capabilities && capabilities.length > 0) {
-      queryBuilder.andWhere('agent.capabilities @> :capabilities', {
-        capabilities: JSON.stringify(capabilities),
-      });
-    }
-
-    if (evolution_level_min !== undefined) {
-      queryBuilder.andWhere('agent.evolution_level >= :min', { min: evolution_level_min });
-    }
-
-    if (evolution_level_max !== undefined) {
-      queryBuilder.andWhere('agent.evolution_level <= :max', { max: evolution_level_max });
-    }
-
-    // Apply sorting
-    const orderDirection = order === SortOrder.ASC ? 'ASC' : 'DESC';
-    queryBuilder.orderBy(`agent.${sort_by}`, orderDirection);
-
-    // Apply pagination
-    const skip = (page - 1) * limit;
-    queryBuilder.skip(skip).take(limit);
-
-    // Execute query
     const [data, total] = await queryBuilder.getManyAndCount();
+
+    const { page, limit } = searchDto;
 
     return {
       data,
@@ -73,6 +69,11 @@ export class IndexerService {
     };
   }
 
+  @Cacheable({
+    key: (id: string) => `agent:${id}`,
+    ttl: 600, // 10 minutes
+    namespace: 'agent',
+  })
   async findOne(id: string): Promise<Agent> {
     const agent = await this.agentRepository.findOne({ where: { id } });
     if (!agent) {
@@ -81,20 +82,41 @@ export class IndexerService {
     return agent;
   }
 
+  @CacheInvalidate({
+    rule: 'agent:performance-update',
+    keys: (id: string) => [`agent:${id}`],
+  })
   async updatePerformanceMetrics(
     id: string,
-    metrics: Partial<Agent['performance_metrics']>,
+    metrics: Partial<Agent["performance_metrics"]>,
   ): Promise<Agent> {
     const agent = await this.findOne(id);
     agent.performance_metrics = { ...agent.performance_metrics, ...metrics };
     return await this.agentRepository.save(agent);
   }
 
+  @Cacheable({
+    key: (limit: number = 10) => `top-performers:${limit}`,
+    ttl: 300, // 5 minutes
+    namespace: 'agent',
+  })
   async getTopPerformers(limit: number = 10): Promise<Agent[]> {
-    return await this.agentRepository
-      .createQueryBuilder('agent')
-      .orderBy("(agent.performance_metrics->>'success_rate')::float", 'DESC')
-      .limit(limit)
-      .getMany();
+    const spec = new HighPerformerSpec(limit);
+
+    const queryBuilder = this.specificationExecutor.execute(spec, "agent");
+
+    return await queryBuilder.getMany();
+  }
+
+  /**
+   * Warm cache for critical queries
+   */
+  async warmCache(): Promise<void> {
+    // Warm top performers cache
+    await this.cacheManager.warm(
+      'top-performers:10',
+      () => this.getTopPerformers(10),
+      { ttl: 300, namespace: 'agent' }
+    );
   }
 }

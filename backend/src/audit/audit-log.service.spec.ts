@@ -34,6 +34,15 @@ describe('AuditLogService', () => {
           provide: getRepositoryToken(AuditLogEntity),
           useValue: mockRepository,
         },
+        {
+          provide: 'EventBus',
+          useValue: {
+            publish: jest.fn(),
+            publishBatch: jest.fn(),
+            subscribe: jest.fn(),
+            unsubscribe: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

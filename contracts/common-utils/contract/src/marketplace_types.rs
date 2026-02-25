@@ -11,7 +11,7 @@ pub enum ListingType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Listing {
     pub seller: Address,
-    pub asset_address: Address, // <--- ADDED THIS
+    pub asset_address: Address,
     pub price: i128,
     pub currency: Address,
     pub listing_type: ListingType,

@@ -10,4 +10,11 @@ module.exports = {
   ],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        types: ['jest', 'node'],
+      },
+    },
+  },
 };

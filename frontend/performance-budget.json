@@ -1,0 +1,38 @@
+{
+    "performanceBudget": {
+        "timings": [
+            {
+                "metric": "first-contentful-paint",
+                "budget": 1800
+            },
+            {
+                "metric": "interactive",
+                "budget": 3500
+            },
+            {
+                "metric": "speed-index",
+                "budget": 3000
+            }
+        ],
+        "resourceSizes": [
+            {
+                "resourceType": "script",
+                "budget": 300
+            },
+            {
+                "resourceType": "image",
+                "budget": 500
+            },
+            {
+                "resourceType": "total",
+                "budget": 1000
+            }
+        ],
+        "resourceCounts": [
+            {
+                "resourceType": "third-party",
+                "budget": 10
+            }
+        ]
+    }
+}

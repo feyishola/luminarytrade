@@ -109,3 +109,4 @@ Cargo.lock
 
 # IDE
 .qodo/
+.qoder/

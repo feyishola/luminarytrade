@@ -4,24 +4,36 @@
   "description": "Frontend applications for ChenAIKit",
   "main": "src/index.tsx",
   "scripts": {
+    "dev": "react-scripts start",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "lint": "eslint src/**/*.{ts,tsx}"
+    "lint": "eslint src/**/*.{ts,tsx}",
+    "analyze": "source-map-explorer 'build/static/js/*.js'"
   },
   "dependencies": {
     "@emotion/react": "^11.11.0",
     "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "5.18.0",
     "@mui/material": "^5.15.0",
+    "@types/uuid": "^10.0.0",
+    "ajv": "^8.18.0",
+    "ajv-keywords": "^5.1.0",
     "axios": "^1.6.0",
+    "date-fns": "^4.1.0",
+    "file-saver": "^2.0.5",
+    "html-to-image": "^1.11.13",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.8.0"
+    "react-router-dom": "^6.8.0",
+    "uuid": "^13.0.0",
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.0",
     "@testing-library/react": "^13.4.0",
+    "@types/file-saver": "^2.0.7",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.19.33",
     "@types/react": "^18.2.0",

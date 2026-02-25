@@ -1,46 +1,38 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Env, String};
 
-<<<<<<< HEAD
-#[contract]
-pub struct CommonUtilsContract;
-
-#[contractimpl]
-impl CommonUtilsContract {
-    /// Initialize common utilities for shared functionality
-    pub fn initialize(_env: Env) {
-        // TODO: Implement initialization
-    }
-
-    /// Validate an account address format
-    /// Returns true if valid, false otherwise
-    pub fn validate_address(_env: Env, _address: String) -> bool {
-        // TODO: Implement address validation
-        true
-    }
-
-    /// Hash data for contracts
-    pub fn hash_data(_env: Env, _data: String) -> String {
-        // TODO: Implement data hashing
-        String::from_str(&_env, "")
-    }
-
-    /// Format and normalize common data structures
-    pub fn normalize_amount(_env: Env, _amount: String) -> String {
-        // TODO: Implement amount normalization
-        String::from_str(&_env, "")
-    }
-
-    /// Check if a value meets minimum threshold requirement
-    pub fn check_threshold(_env: Env, _value: u32, _threshold: u32) -> bool {
-        // TODO: Implement threshold checking
-        _value >= _threshold
-=======
-pub mod oracle_bridge;
-pub mod marketplace_types;
+pub mod error;
 pub mod marketplace;
+pub mod marketplace_types;
+pub mod oracle_bridge;
+pub mod rate_limit;
+pub mod timelock;
+pub mod validator;
+pub mod storage;
+pub mod upgrade_registry;
+pub mod upgrade_proxy;
+pub mod migration;
+pub mod state_machine;
+pub mod dex;
 
-use soroban_sdk::{contracttype, Address, BytesN};
+pub use error::CommonError;
+pub use state_machine::{State, StateMachine, FraudDetectState, RiskEvalState, CreditScoreState, state_guard, transition_to};
+pub mod acl;
+pub mod batch;
+
+use soroban_sdk::{
+    contract,
+    contractimpl,
+    Address,
+    Env,
+    BytesN,
+    contracttype,
+    symbol_short,
+    Bytes,
+    Vec,
+    contracttype,
+    BytesN,
+    IntoVal,
+};
 
 #[contracttype]
 pub enum DataKey {
@@ -57,37 +49,38 @@ pub struct Attestation {
     pub agent: Address,
     pub new_level: u32,
     pub stake_amount: i128,
+    pub attestation_hash: BytesN<32>,
     pub attestation_hash: BytesN<32>, // unique ID / replay protection
 }
 
 
-use soroban_sdk::{contract, contractimpl, Env};
 
-#[contract]
-pub struct EvolutionManager;
-
-#[contractimpl]
-impl EvolutionManager {
-    pub fn emit_evolution_completed(
-        env: Env,
-        agent: Address,
-        new_level: u32,
-        total_stake: i128,
-        attestation_hash: BytesN<32>,
-    ) {
-        env.events().publish(
-            ("EvolutionCompleted",),
-            (agent, new_level, total_stake, attestation_hash),
-        );
->>>>>>> 81b53c80d2e61683b492c98783cb94e79baeaa16
+impl<K: IStorageKey> StorageRepository<K> for PersistentStorageRepository {
+    fn set<V>(&self, key: &K, value: &V)
+    where
+        V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().set(key, value);
+    }
+    fn get<V>(&self, key: &K) -> Option<V>
+    where
+        V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    {
+        self.env.storage().persistent().get(key)
+    }
+    fn remove(&self, key: &K) {
+        self.env.storage().persistent().remove(key);
+    }
+    fn has(&self, key: &K) -> bool {
+        self.env.storage().persistent().has(key)
+    }
+    fn extend_ttl(&self, key: &K, threshold: u32, extend_to: u32) {
+        self.env
+            .storage()
+            .persistent()
+            .extend_ttl(key, threshold, extend_to);
     }
 }
-
-
-use soroban_sdk::{
-    contract, contractimpl, panic_with_error, Symbol, Address, Env, Bytes, Vec, 
-    contracterror, contracttype,
-};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -123,23 +116,26 @@ pub struct Execution {
     pub id: u64,
     pub agent: Address,
     pub action_type: ActionType,
-    pub data: Bytes, 
+    pub data: Bytes,
     pub timestamp: u64,
 }
 
 #[contract]
 pub struct CommonUtilsContract;
 
-const RATE_LIMIT_WINDOW: u64 = 3600; 
-const RATE_LIMIT_MAX: u32 = 10; 
+const RATE_LIMIT_WINDOW: u64 = 3600;
+const RATE_LIMIT_MAX: u32 = 10;
 
 #[contractimpl]
 impl CommonUtilsContract {
     /// Initialize contract with admin.
     pub fn initialize(env: Env, admin: Address) {
-        // admin.require_auth(); // verify signature if needed
-        env.storage().persistent().set(&Symbol::new(&env, "admin"), &admin);
-        env.storage().persistent().set(&Symbol::new(&env, "exec_cnt"), &0u64);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "admin"), &admin);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "exec_cnt"), &0u64);
     }
 
     /// Submit an agent action.
@@ -150,7 +146,11 @@ impl CommonUtilsContract {
 
         Self::check_rate_limit(&env, &agent);
 
-        let counter = env.storage().persistent().get::<_, u64>(&Symbol::new(&env, "exec_cnt")).unwrap_or(0);
+        let counter = env
+            .storage()
+            .persistent()
+            .get::<_, u64>(&Symbol::new(&env, "exec_cnt"))
+            .unwrap_or(0);
         let execution_id = counter + 1;
 
         let timestamp = env.ledger().timestamp();
@@ -164,15 +164,20 @@ impl CommonUtilsContract {
 
         let execution_key = (Symbol::new(&env, "execution"), execution_id);
         if env.storage().persistent().has(&execution_key) {
-             panic_with_error!(&env, Error::ExecutionIdExists);
+            panic_with_error!(&env, Error::ExecutionIdExists);
         }
-        
+
         env.storage().persistent().set(&execution_key, &execution);
-        env.storage().persistent().set(&Symbol::new(&env, "exec_cnt"), &execution_id);
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, "exec_cnt"), &execution_id);
 
         Self::update_rate_limit(&env, &agent, timestamp);
 
-        env.events().publish((Symbol::new(&env, "act_sub"),), (execution_id, agent, action_type, timestamp));
+        env.events().publish(
+            (Symbol::new(&env, "act_sub"),),
+            (execution_id, agent, action_type, timestamp),
+        );
 
         execution_id
     }
@@ -183,22 +188,25 @@ impl CommonUtilsContract {
     }
 
     pub fn admin(env: Env) -> Address {
-        env.storage().persistent().get(&Symbol::new(&env, "admin")).unwrap()
+        env.storage()
+            .persistent()
+            .get(&Symbol::new(&env, "admin"))
+            .unwrap()
     }
 
     fn check_rate_limit(env: &Env, agent: &Address) {
         let now = env.ledger().timestamp();
         let window_start = now.saturating_sub(RATE_LIMIT_WINDOW);
         let key = (Symbol::new(&env, "rate_limit"), agent.clone());
-        
+
         let actions: Vec<u64> = env.storage().temporary().get(&key).unwrap_or(Vec::new(env));
         let mut recent_count = 0;
         for t in actions.iter() {
-             if t >= window_start {
-                 recent_count += 1;
-             }
+            if t >= window_start {
+                recent_count += 1;
+            }
         }
-        
+
         if recent_count >= RATE_LIMIT_MAX {
             panic_with_error!(env, Error::RateLimitExceeded);
         }
@@ -210,22 +218,44 @@ impl CommonUtilsContract {
         actions.push_back(timestamp);
         env.storage().temporary().set(&key, &actions);
     }
-    
-}
 
-
-#[cfg(test)]
-<<<<<<< HEAD
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_check_threshold() {
-        // Basic test: 100 >= 50 should be true
-        let result = true; // Simplified for now
-        assert!(result);
+    /// Helper to check permission against ACL contract
+    /// In a production scenario, this would be a cross-contract call.
+    pub fn check_permission(env: Env, acl_address: Address, user: Address, resource: Symbol, action: Symbol) -> bool {
+        env.invoke_contract::<bool>(&acl_address, &Symbol::new(&env, "has_permission"), soroban_sdk::vec![&env, user.into_val(&env), resource.into_val(&env), action.into_val(&env)])
     }
 }
-=======
+
+#[contract]
+pub struct EvolutionManager;
+
+#[contractimpl]
+impl EvolutionManager {
+    pub fn emit_evolution_completed(
+        env: Env,
+        agent: Address,
+        new_level: u32,
+        total_stake: i128,
+        attestation_hash: BytesN<32>,
+    ) {
+        env.events().publish(
+            ("EvolutionCompleted",),
+            (agent, new_level, total_stake, attestation_hash),
+        );
+    }
+}
+
+#[cfg(test)]
 mod test_marketplace;
->>>>>>> 81b53c80d2e61683b492c98783cb94e79baeaa16
+
+#[cfg(test)]
+mod timelock_tests;
+
+#[cfg(test)]
+mod batch_tests;
+
+#[cfg(test)]
+mod rate_limit_tests;
+
+#[cfg(test)]
+mod state_machine_tests;
