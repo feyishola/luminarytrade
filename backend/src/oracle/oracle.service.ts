@@ -12,7 +12,7 @@ import { CustomOperation } from '../transaction/compensatable-operation';
 import { IEventBus } from '../events/interfaces/event-bus.interface';
 import { 
   OracleSnapshotRecordedEvent, 
-A  PriceFeedUpdatedEvent 
+  PriceFeedUpdatedEvent 
 } from '../events/domain-events/oracle.events';
 import { CacheManager } from '../cache/cache-manager.service';
 import { CacheInvalidator } from '../cache/cache-invalidator.service';
