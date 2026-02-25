@@ -21,10 +21,14 @@ import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
 import { PluginsModule } from "./plugins/plugins.module";
 
+import { validate } from "./config/config.validation";
+import { AppConfigService } from "./config/app-config.service";
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate,
     }),
 
     // Startup Module - First to ensure proper initialization order
@@ -58,6 +62,8 @@ import { PluginsModule } from "./plugins/plugins.module";
     RateLimitingModule,
     AuthModule,
   ],
+  providers: [AppConfigService],
+  exports: [AppConfigService],
   controllers: [AppController],
 })
-export class AppModule {}
+export class AppModule { }
