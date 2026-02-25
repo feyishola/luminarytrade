@@ -12,6 +12,7 @@ pub mod upgrade_registry;
 pub mod upgrade_proxy;
 pub mod migration;
 pub mod state_machine;
+pub mod dex;
 
 pub use error::CommonError;
 pub use state_machine::{State, StateMachine, FraudDetectState, RiskEvalState, CreditScoreState, state_guard, transition_to};

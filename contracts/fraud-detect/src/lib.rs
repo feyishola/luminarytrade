@@ -1,23 +1,37 @@
 //! # Fraud Detection Contract
 //!
 //! Analyzes transactions for potential fraud and manages fraud reports.
+//! Integrates with DEX for trading pattern analysis.
 
 #![no_std]
-use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec, Val, TryFromVal, Bytes, BytesN,
+use common_utils::authorization::{
+    CachedAuth, IAuthorizable, Permission, PermissionCache, RoleBasedAuth,
 };
+use common_utils::compression::FraudReportCompressor;
+use common_utils::data_migration::{CompressionType, DataMigrationManager, MigrationConfig};
+use common_utils::dex::cache::DexDataCache;
+use common_utils::dex::fraud_indicators::{
+    DetectionThresholds, FraudIndicator, IndicatorType, OverallRisk, PatternDetector, RiskLevel,
+    Severity, TradingPattern,
+};
+use common_utils::dex::liquidity::LiquidityMetrics;
+use common_utils::dex::trading_data::{TradingData, TradingVolume};
+use common_utils::dex::{DexAdapter, DexConfig, StellarDexAdapter, TokenPair};
 use common_utils::error::CommonError;
+use common_utils::error::{AuthorizationError, ContractError, StateError};
 use common_utils::migration::DataMigration;
-use common_utils::error::{AuthorizationError, StateError, ContractError};
-use common_utils::authorization::{IAuthorizable, RoleBasedAuth, Permission, PermissionCache, CachedAuth};
-use common_utils::{permission, auth, cached_auth, check_authorization, rate_limit, rate_limit_adaptive};
 use common_utils::rate_limit::{RateLimiter, TrustTier};
-use common_utils::compression::{FraudReportCompressor, FraudReport};
+use common_utils::storage_monitoring::{PerformanceMonitor, StorageTracker};
 use common_utils::storage_optimization::{CompressedReportStorage, DataSeparator, DataTemperature};
-use common_utils::storage_monitoring::{StorageTracker, PerformanceMonitor};
-use common_utils::data_migration::{DataMigrationManager, MigrationConfig, CompressionType};
+use common_utils::{
+    auth, cached_auth, check_authorization, permission, rate_limit, rate_limit_adaptive,
+};
 use common_utils::state_machine::{State, StateMachine, FraudDetectState};
 use common_utils::{state_guard, transition_to};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, Address, Bytes, Env, String, Symbol,
+    TryFromVal, Val, Vec,
+};
 
 #[derive(Clone)]
 #[contracttype]
@@ -27,8 +41,12 @@ pub enum DataKey {
     Reports(Symbol),
     ReportsMetadata(Symbol),
     MigrationState,
+    DexConfig,
+    DexEnabled,
+    FraudIndicators(Symbol),
+    DetectionThresholds,
+    TradingPatternHistory(Symbol),
     ContractState,
-    Reporter(Address),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,7 +75,6 @@ impl StateMachine<FraudDetectState> for FraudDetectContract {
 
 #[contractimpl]
 impl FraudDetectContract {
-    /// Initialize the fraud detection contract with an administrator and ACL contract
     pub fn initialize(env: Env, admin: Address, acl_contract: Address) -> Result<(), StateError> {
         // Ensure contract is uninitialized
         let current_state = Self::get_state(&env);
@@ -76,88 +93,168 @@ impl FraudDetectContract {
         
         // Store admin and ACL for backward compatibility
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::AclContract, &acl_contract);
-        
-        env.events().publish(
-            (symbol_short!("init"),),
-            (admin, acl_contract),
-        );
+        env.storage()
+            .instance()
+            .set(&DataKey::AclContract, &acl_contract);
+        env.storage().instance().set(&DataKey::DexEnabled, &true);
+
+        let thresholds = DetectionThresholds::new();
+        env.storage()
+            .instance()
+            .set(&DataKey::DetectionThresholds, &thresholds);
+
+        let dex_config = DexConfig::default();
+        env.storage()
+            .instance()
+            .set(&DataKey::DexConfig, &dex_config);
+
+        env.events()
+            .publish((symbol_short!("init"),), (admin, acl_contract));
         Ok(())
     }
 
+    pub fn initialize_dex(env: Env, admin: Address) -> Result<(), ContractError> {
+        Self::require_admin(&env, &admin)?;
 
-    /// Add an approved reporter (ACL Managed)
-    pub fn add_reporter(env: Env, caller: Address, reporter: Address) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        
-        caller.require_auth();
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
-        
-        if !common_utils::check_permission(
-            env.clone(),
-            state_data.acl_contract.clone(),
-            caller,
-            symbol_short!("fraud"),
-            symbol_short!("manage")
-        ) {
-            return Err(AuthorizationError::NotAuthorized);
-        }
+        StellarDexAdapter::initialize(&env).map_err(|_| ContractError::InvalidState)?;
 
-        env.storage().instance().set(&DataKey::Reporter(reporter.clone()), &true);
-        
-        env.events().publish(
-            (symbol_short!("add_rpt"),),
-            reporter,
-        );
-        
+        env.storage().instance().set(&DataKey::DexEnabled, &true);
+
         Ok(())
     }
 
-    /// Remove an approved reporter (Admin only)
-    pub fn remove_reporter(env: Env, caller: Address, reporter: Address) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        
-        caller.require_auth();
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
-        
-        if !common_utils::check_permission(
-            env.clone(),
-            state_data.acl_contract.clone(),
-            caller,
-            symbol_short!("fraud"),
-            symbol_short!("manage")
-        ) {
-            return Err(AuthorizationError::NotAuthorized);
-        }
-        
-        env.storage().instance().remove(&DataKey::Reporter(reporter.clone()));
-        
-        env.events().publish(
-            (symbol_short!("rem_rpt"),),
-            reporter,
-        );
-        
+    pub fn set_detection_thresholds(
+        env: Env,
+        admin: Address,
+        thresholds: DetectionThresholds,
+    ) -> Result<(), ContractError> {
+        Self::require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::DetectionThresholds, &thresholds);
         Ok(())
     }
 
-    /// Update fraud detection model (Admin only)
-    pub fn update_model(env: Env, admin: Address, model_data: Bytes) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
-        
-        if state_data.admin != admin {
-            return Err(AuthorizationError::NotAuthorized);
+    pub fn get_detection_thresholds(env: Env) -> DetectionThresholds {
+        env.storage()
+            .instance()
+            .get(&DataKey::DetectionThresholds)
+            .unwrap_or_else(|| DetectionThresholds::new())
+    }
+
+    pub fn analyze_trading_for_fraud(
+        env: Env,
+        pair: TokenPair,
+    ) -> Result<FraudAnalysisResult, ContractError> {
+        let _timer = PerformanceMonitor::start_timer(&env, &Symbol::new(&env, "analyze_fraud"));
+
+        let dex_enabled: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::DexEnabled)
+            .unwrap_or(false);
+
+        if !dex_enabled {
+            return Ok(FraudAnalysisResult {
+                indicators: Vec::new(&env),
+                overall_risk: OverallRisk {
+                    risk_level: RiskLevel::Low,
+                    total_score_impact: 0,
+                    critical_count: 0,
+                    high_count: 0,
+                    medium_count: 0,
+                    low_count: 0,
+                },
+                trading_data: None,
+            });
         }
-        admin.require_auth();
+
+        let trading_data = Self::fetch_trading_data(&env, &pair)?;
+
+        let thresholds = Self::get_detection_thresholds(env.clone());
+        let detector = PatternDetector::with_thresholds(&env, thresholds);
+
+        let indicators = detector.analyze(&trading_data);
+        let overall_risk = detector.overall_risk(&indicators);
+
+        let patterns = detector.detect_patterns(&trading_data);
+
+        env.storage().instance().set(
+            &DataKey::FraudIndicators(pair.symbol_a),
+            &indicators.clone(),
+        );
+        env.storage()
+            .instance()
+            .set(&DataKey::TradingPatternHistory(pair.symbol_a), &patterns);
+
+        StorageTracker::record_operation(
+            &env,
+            &Symbol::new(&env, "fraud_analysis"),
+            &pair.symbol_a,
+            100,
+            true,
+        );
+
+        let _duration = PerformanceMonitor::end_timer(&env, &Symbol::new(&env, "analyze_fraud"));
+
+        Ok(FraudAnalysisResult {
+            indicators,
+            overall_risk,
+            trading_data: Some(trading_data),
+        })
+    }
+
+    pub fn analyze_transaction(
+        env: Env,
+        transaction_data: String,
+        pair: Option<TokenPair>,
+    ) -> bool {
+        let _timer = PerformanceMonitor::start_timer(&env, &Symbol::new(&env, "analyze_txn"));
+
+        if let Some(token_pair) = pair {
+            if let Ok(result) = Self::analyze_trading_for_fraud(env.clone(), token_pair) {
+                if result.overall_risk.requires_review() {
+                    return true;
+                }
+            }
+        }
+
+        let has_suspicious_pattern = transaction_data.len() > 1000;
+
+        let _duration = PerformanceMonitor::end_timer(&env, &Symbol::new(&env, "analyze_txn"));
+
+        has_suspicious_pattern
+    }
+
+    pub fn get_risk_score(env: Env, pair: TokenPair) -> u32 {
+        if let Ok(result) = Self::analyze_trading_for_fraud(env.clone(), pair) {
+            match result.overall_risk.risk_level {
+                RiskLevel::Low => 25,
+                RiskLevel::Medium => 50,
+                RiskLevel::High => 75,
+                RiskLevel::Critical => 100,
+            }
+        } else {
+            0
+        }
+    }
+
+    pub fn get_indicators(env: Env, pair: TokenPair) -> Vec<FraudIndicator> {
+        env.storage()
+            .instance()
+            .get(&DataKey::FraudIndicators(pair.symbol_a))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    pub fn get_trading_patterns(env: Env, pair: TokenPair) -> Vec<TradingPattern> {
+        env.storage()
+            .instance()
+            .get(&DataKey::TradingPatternHistory(pair.symbol_a))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    pub fn update_model(env: Env, admin: Address, model_data: Bytes) -> Result<(), ContractError> {
+        Self::require_admin(&env, &admin)?;
 
         env.events().publish(
             (symbol_short!("mdl_upd"),),
@@ -166,79 +263,104 @@ impl FraudDetectContract {
         Ok(())
     }
 
-    /// Set a user's trust tier (Admin only)
+    pub fn add_reporter(
+        env: Env,
+        caller: Address,
+        reporter: Address,
+    ) -> Result<(), AuthorizationError> {
+        caller.require_auth();
+
+        let acl: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::AclContract)
+            .ok_or(AuthorizationError::NotInitialized)?;
+
+        if !common_utils::check_permission(
+            env.clone(),
+            acl,
+            caller,
+            symbol_short!("fraud"),
+            symbol_short!("manage"),
+        ) {
+            return Err(AuthorizationError::NotAuthorized);
+        }
+
+        Ok(())
+    }
+
+    pub fn remove_reporter(env: Env, admin: Address, reporter: Address) -> Result<(), CommonError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(CommonError::NotInitialized)?;
+        stored_admin.require_auth();
+
+        env.events().publish((symbol_short!("rem_rpt"),), reporter);
+        Ok(())
+    }
+
     pub fn set_user_trust_tier(
         env: Env,
         admin: Address,
         user: Address,
         tier: TrustTier,
     ) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
-        
-        if state_data.admin != admin {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
             return Err(AuthorizationError::NotAuthorized);
         }
-        admin.require_auth();
-        
         RateLimiter::set_trust_tier(&env, &user, &tier);
         Ok(())
     }
 
-    /// Update network load multiplier (Admin only)
-    pub fn set_network_load(
-        env: Env,
-        admin: Address,
-        load: u32,
-    ) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
-        
-        if state_data.admin != admin {
+    pub fn set_network_load(env: Env, admin: Address, load: u32) -> Result<(), AuthorizationError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuthorizationError::NotInitialized)?;
+        stored_admin.require_auth();
+        if stored_admin != admin {
             return Err(AuthorizationError::NotAuthorized);
         }
-        admin.require_auth();
-        
         RateLimiter::set_network_load(&env, load);
         Ok(())
     }
 
-    /// Submit a fraud score for an agent (Reporter only)
     pub fn submit_report(
         env: Env,
         reporter: Address,
         agent_id: Symbol,
         score: u32,
-    ) -> Result<(), AuthorizationError> {
-        // State guard: contract must be active
-        state_guard!(Self, &env, active);
-        // Rate limit: 10 submissions per hour per user (adaptive)
+        trading_evidence: Option<TradingEvidence>,
+    ) -> Result<(), ContractError> {
         rate_limit_adaptive!(env, reporter, "submit_rpt",
             max: 10, window: 3600,
             strategy: SlidingWindow, scope: PerUser);
 
-        let auth = Self::get_auth(&env);
-        check_authorization!(auth, &env, &reporter, permission!(Reporter));
-        
         reporter.require_auth();
 
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(AuthorizationError::NotInitialized)?;
+        let acl: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::AclContract)
+            .ok_or(ContractError::NotInitialized)?;
 
         if !common_utils::check_permission(
             env.clone(),
-            state_data.acl_contract.clone(),
+            acl,
             reporter.clone(),
             symbol_short!("fraud"),
-            symbol_short!("report")
+            symbol_short!("report"),
         ) {
-            return Err(AuthorizationError::NotAuthorized);
+            return Err(ContractError::Unauthorized);
         }
 
         let mut reports: Vec<FraudReport> = env
@@ -247,198 +369,199 @@ impl FraudDetectContract {
             .get(&DataKey::Reports(agent_id.clone()))
             .unwrap_or(Vec::new(&env));
 
-        // Create new report
+        let mut adjusted_score = score;
+
+        if let Some(evidence) = trading_evidence {
+            if let Ok(result) = Self::analyze_trading_for_fraud(env.clone(), evidence.pair.clone())
+            {
+                let risk_adjustment = match result.overall_risk.risk_level {
+                    RiskLevel::Critical => 20,
+                    RiskLevel::High => 10,
+                    RiskLevel::Medium => 5,
+                    RiskLevel::Low => 0,
+                };
+                adjusted_score = (score + risk_adjustment).min(100);
+            }
+        }
+
         let report = FraudReport {
-            score,
+            score: adjusted_score,
             reporter: reporter.clone(),
             timestamp: env.ledger().timestamp(),
         };
 
-        // Add to existing reports
         let mut updated_reports = Vec::new(&env);
-        for existing_report in existing_reports.iter() {
-            updated_reports.push_back(existing_report.clone());
+        for existing_report in reports.iter() {
+            updated_reports.push_back(existing_report);
         }
         updated_reports.push_back(report);
 
-        // Store compressed reports
-        CompressedReportStorage::store_reports(&env, &agent_id, &updated_reports)?;
-        
-        // Update latest score for quick access
-        CompressedReportStorage::update_latest_score(&env, &agent_id, score)?;
-        
-        // Record storage operation
-        let report_size = 44; // Approximate size per report
-        StorageTracker::record_operation(
-            &env, 
-            &symbol_short!("store"), 
-            &agent_id, 
-            report_size, 
-            true
-        );
+        CompressedReportStorage::store_reports(&env, &agent_id, &updated_reports)
+            .map_err(|_| ContractError::StorageFull)?;
 
-        // Update total reports count in state
-        let mut new_state_data = state_data.clone();
-        new_state_data.total_reports += 1;
-        Self::set_state(&env, State::Active(new_state_data));
+        CompressedReportStorage::update_latest_score(&env, &agent_id, adjusted_score)
+            .map_err(|_| ContractError::StorageFull)?;
 
-        // Emit event
+        StorageTracker::record_operation(&env, &symbol_short!("store"), &agent_id, 44, true);
+
         env.events().publish(
             (symbol_short!("fraud_rpt"), agent_id),
-            (reporter, score, env.ledger().timestamp()),
+            (reporter, adjusted_score, env.ledger().timestamp()),
         );
 
-        // End performance monitoring
-        let _duration = PerformanceMonitor::end_timer(&env, &symbol_short!("submit_report"));
-
         Ok(())
     }
 
-    /// Pause the contract (Admin only)
-    pub fn pause(env: Env, admin: Address) -> Result<(), StateError> {
-        state_guard!(Self, &env, active);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(StateError::NotInitialized)?;
-        
-        if state_data.admin != admin {
-            return Err(StateError::InvalidState);
-        }
-        admin.require_auth();
-        
-        let paused_state = State::Paused(state_data.clone());
-        transition_to!(Self, &env, paused_state)?;
-        
-        Ok(())
-    }
-
-    /// Resume the contract from paused state (Admin only)
-    pub fn resume(env: Env, admin: Address) -> Result<(), StateError> {
-        let state = Self::get_state(&env);
-        if !state.is_paused() {
-            return Err(StateError::InvalidState);
-        }
-        
-        let state_data = state.get_data().ok_or(StateError::NotInitialized)?;
-        
-        if state_data.admin != admin {
-            return Err(StateError::InvalidState);
-        }
-        admin.require_auth();
-        
-        let active_state = State::Active(state_data.clone());
-        transition_to!(Self, &env, active_state)?;
-        
-        Ok(())
-    }
-
-    /// Get the current contract state
-    pub fn get_contract_state(env: Env) -> State<FraudDetectState> {
-        Self::get_state(&env)
-    }
-
-    /// Get total reports count
-    pub fn get_total_reports(env: Env) -> Result<u64, StateError> {
-        state_guard!(Self, &env, initialized);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(StateError::NotInitialized)?;
-        Ok(state_data.total_reports)
-    }
-
-    /// Retrieve all fraud reports for a given agent ID
     pub fn get_reports(env: Env, agent_id: Symbol) -> Vec<FraudReport> {
-        // Allow reads even when paused, but not when uninitialized or terminated
-        if Self::require_initialized(&env).is_err() {
-            return Vec::new(&env);
-        }
         let _timer = PerformanceMonitor::start_timer(&env, &symbol_short!("get_reports"));
-        
+
         let result = CompressedReportStorage::get_reports(&env, &agent_id)
             .unwrap_or_else(|_| Vec::new(&env));
-        
-        // Record access
-        StorageTracker::record_operation(
-            &env, 
-            &symbol_short!("access"), 
-            &agent_id, 
-            0, 
-            false
-        );
-        
+
+        StorageTracker::record_operation(&env, &symbol_short!("access"), &agent_id, 0, false);
+
         let _duration = PerformanceMonitor::end_timer(&env, &symbol_short!("get_reports"));
-        
+
         result
     }
 
-    /// Get the latest fraud score for a given agent ID
     pub fn get_latest_score(env: Env, agent_id: Symbol) -> u32 {
         let _timer = PerformanceMonitor::start_timer(&env, &symbol_short!("get_latest_score"));
-        
-        let result = CompressedReportStorage::get_latest_score(&env, &agent_id)
-            .unwrap_or(0);
-        
-        // Record access
-        StorageTracker::record_operation(
-            &env, 
-            &symbol_short!("access"), 
-            &agent_id, 
-            0, 
-            false
-        );
-        
+
+        let result = CompressedReportStorage::get_latest_score(&env, &agent_id).unwrap_or(0);
+
+        StorageTracker::record_operation(&env, &symbol_short!("access"), &agent_id, 0, false);
+
         let _duration = PerformanceMonitor::end_timer(&env, &symbol_short!("get_latest_score"));
-        
+
         result
     }
-    
-    /// Get the authorization instance for this contract
+
+    pub fn batch_analyze_pairs(
+        env: Env,
+        pairs: Vec<TokenPair>,
+    ) -> Result<Vec<FraudAnalysisResult>, ContractError> {
+        let _timer = PerformanceMonitor::start_timer(&env, &Symbol::new(&env, "batch_analyze"));
+
+        let mut results = Vec::new(&env);
+
+        for pair in pairs.iter() {
+            if let Ok(result) = Self::analyze_trading_for_fraud(env.clone(), pair) {
+                results.push_back(result);
+            }
+        }
+
+        let _duration = PerformanceMonitor::end_timer(&env, &Symbol::new(&env, "batch_analyze"));
+
+        Ok(results)
+    }
+
+    pub fn invalidate_dex_cache(
+        env: Env,
+        admin: Address,
+        pair: TokenPair,
+    ) -> Result<(), ContractError> {
+        Self::require_admin(&env, &admin)?;
+
+        let mut cache = DexDataCache::new(&env);
+        cache.invalidate(&pair);
+
+        Ok(())
+    }
+
     fn get_auth(env: &Env) -> CachedAuth<RoleBasedAuth> {
-        let role_auth = auth!(RoleBased, 
-            Symbol::new(env, "admin"), 
+        let role_auth = auth!(
+            RoleBased,
+            Symbol::new(env, "admin"),
             Symbol::new(env, "role")
         );
         let cache = PermissionCache::new(300, Symbol::new(env, "auth_cache"));
         cached_auth!(role_auth, cache)
     }
-    
-    /// Check if an address has a specific role
+
     pub fn has_role(env: Env, address: Address, role: Permission) -> bool {
         let auth = Self::get_auth(&env);
-        auth.check_permission(&env, &address, &role).unwrap_or(false)
+        auth.check_permission(&env, &address, &role)
+            .unwrap_or(false)
     }
-    
-    /// Migrate existing data to compressed format
+
     pub fn migrate_to_compressed(env: Env, admin: Address) -> Result<u64, ContractError> {
-        // State guard: must be active to start migration
-        state_guard!(Self, &env, active);
-        
-        let state = Self::get_state(&env);
-        let state_data = state.get_data().ok_or(ContractError::NotInitialized)?;
-        
-        if state_data.admin != admin {
-            return Err(ContractError::Unauthorized);
-        }
-        admin.require_auth();
-        
-        // Transition to migrating state
-        let migrating_state = State::Migrating(state_data.clone());
-        transition_to!(Self, &env, migrating_state)?;
-        
-        // Check if migration is already in progress
+        let auth = Self::get_auth(&env);
+        check_authorization!(auth, &env, &admin, permission!(Admin));
+
         if env.storage().instance().has(&DataKey::MigrationState) {
             return Err(ContractError::InvalidState);
         }
-        
-        // Perform migration...
-        let migration_id = 1u64; // Simplified
-        
-        // Transition back to active after migration
-        let active_state = State::Active(state_data);
-        transition_to!(Self, &env, active_state)?;
-        
-        Ok(migration_id)
+
+        Ok(0)
     }
+
+    fn require_admin(env: &Env, admin: &Address) -> Result<(), ContractError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
+
+        if stored_admin != *admin {
+            return Err(ContractError::Unauthorized);
+        }
+        admin.require_auth();
+        Ok(())
+    }
+
+    fn fetch_trading_data(env: &Env, pair: &TokenPair) -> Result<TradingData, ContractError> {
+        let mut cache = DexDataCache::new(env);
+
+        if let Some(data) = cache.get_or_stale(pair) {
+            return Ok(data);
+        }
+
+        let adapter = StellarDexAdapter::new(env);
+        let pool_info = adapter
+            .fetch_pool_data(pair)
+            .map_err(|_| ContractError::ExternalServiceError)?;
+
+        let volume = TradingVolume::new(
+            env,
+            pair.clone(),
+            pool_info.reserve_a / 10,
+            pool_info.reserve_b / 10,
+            (pool_info.reserve_a + pool_info.reserve_b) / 20,
+            1000,
+            86400,
+        );
+
+        let price = common_utils::dex::trading_data::PriceData::new(
+            env,
+            pair.clone(),
+            pool_info.price_a_to_b(),
+            7,
+            "stellar_dex",
+        );
+
+        let trading_data = TradingData::new(env, pair.clone(), volume, price);
+
+        cache.set_trading_data(pair, trading_data.clone(), "stellar_dex");
+
+        Ok(trading_data)
+    }
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct FraudAnalysisResult {
+    pub indicators: Vec<FraudIndicator>,
+    pub overall_risk: OverallRisk,
+    pub trading_data: Option<TradingData>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct TradingEvidence {
+    pub pair: TokenPair,
+    pub volume_anomaly: bool,
+    pub price_anomaly: bool,
 }
 
 #[contractimpl]
