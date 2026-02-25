@@ -18,10 +18,14 @@ import { TracingModule } from "./tracing/tracing.module";
 import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
 
+import { validate } from "./config/config.validation";
+import { AppConfigService } from "./config/app-config.service";
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate,
     }),
 
     TypeOrmModule.forRootAsync({
@@ -49,6 +53,8 @@ import { CacheConfigFactory } from "./config/cache.factory";
     OracleModule,
     RateLimitingModule,
   ],
+  providers: [AppConfigService],
+  exports: [AppConfigService],
   controllers: [AppController],
 })
-export class AppModule {}
+export class AppModule { }
