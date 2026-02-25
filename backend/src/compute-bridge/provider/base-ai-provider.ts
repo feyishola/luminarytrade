@@ -2,8 +2,13 @@ import { Logger } from "@nestjs/common";
 import { NormalizedScoringResult } from "../dto/ai-scoring.dto";
 import { AIProvider } from "../entities/ai-result-entity";
 import { IAIProvider } from "../interface/ai-provider.interface";
+import {
+  IPlugin,
+  PluginMetadata,
+} from "../../plugins/interfaces/plugin.interface";
+import { getPluginMetadata } from "../../plugins/decorators/plugin.decorator";
 
-export abstract class BaseAIProvider implements IAIProvider {
+export abstract class BaseAIProvider implements IAIProvider, IPlugin {
   protected readonly logger: Logger;
   protected readonly maxRetries: number;
   protected readonly timeout: number;
@@ -28,9 +33,38 @@ export abstract class BaseAIProvider implements IAIProvider {
     return this.providerName;
   }
 
+  getMetadata(): PluginMetadata {
+    const metadata = getPluginMetadata(this);
+    if (!metadata) {
+      return {
+        name: this.getName(),
+        version: "1.0.0",
+        description: `AI Provider for ${this.getName()}`,
+      };
+    }
+    return metadata;
+  }
+
   isConfigured(): boolean {
     return !!this.apiKey;
   }
+
+  async onInit(): Promise<void> {
+    this.logger.log(`Initializing plugin: ${this.getName()}`);
+  }
+
+  async onEnable(): Promise<void> {
+    this.logger.log(`Enabling plugin: ${this.getName()}`);
+  }
+
+  async onDisable(): Promise<void> {
+    this.logger.log(`Disabling plugin: ${this.getName()}`);
+  }
+
+  async onDestroy(): Promise<void> {
+    this.logger.log(`Destroying plugin: ${this.getName()}`);
+  }
+
   protected normalizeScore(score: number, min: number, max: number): number {
     // Normalize to 0-100 scale
     return Math.round(((score - min) / (max - min)) * 100);

@@ -18,12 +18,15 @@ import { AuthModule } from "./auth/auth.module";
 
 import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
+import { PluginsModule } from "./plugins/plugins.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    PluginsModule,
 
     TypeOrmModule.forRootAsync({
       useFactory: () => {

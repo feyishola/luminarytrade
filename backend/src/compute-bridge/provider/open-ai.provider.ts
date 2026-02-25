@@ -4,8 +4,14 @@ import { BaseAIProvider } from "./base-ai-provider";
 import { NormalizedScoringResult } from "../dto/ai-scoring.dto";
 import axios, { AxiosInstance } from "axios";
 import { AIProvider } from "../entities/ai-result-entity";
+import { Plugin } from "../../plugins/decorators/plugin.decorator";
 
 @Injectable()
+@Plugin({
+  name: AIProvider.OPENAI,
+  version: "1.0.0",
+  description: "OpenAI GPT-4 Scoring Provider",
+})
 export class OpenAIProvider extends BaseAIProvider {
   private client: AxiosInstance;
 
