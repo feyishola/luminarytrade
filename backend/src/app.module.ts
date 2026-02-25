@@ -15,6 +15,7 @@ import { TransactionModule } from "./transaction/transaction.module";
 import { RateLimitingModule } from "./rate-limiting/rate-limiting.module";
 import { TracingModule } from "./tracing/tracing.module";
 import { AuthModule } from "./auth/auth.module";
+import { StartupModule } from "./startup/startup.module";
 
 import { DatabaseConfigFactory } from "./config/database.factory";
 import { CacheConfigFactory } from "./config/cache.factory";
@@ -25,6 +26,9 @@ import { PluginsModule } from "./plugins/plugins.module";
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    // Startup Module - First to ensure proper initialization order
+    StartupModule,
 
     PluginsModule,
 
