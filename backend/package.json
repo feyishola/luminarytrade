@@ -8,6 +8,7 @@
     "dev": "ts-node --watch src/main.ts",
     "build": "tsc",
     "test": "jest",
+    "test:performance": "jest --testPathPattern=performance",
     "lint": "eslint src/**/*.ts"
   },
   "dependencies": {

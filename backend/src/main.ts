@@ -10,52 +10,63 @@ import { TracingInterceptor } from './tracing/interceptors/tracing.interceptor';
 import { TracingMiddleware } from './tracing/middleware/tracing.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { StartupService } from './startup/services/startup.service';
+import { MiddlewarePipeline } from './middleware-pipeline/pipeline';
+import { wrap } from './middleware-pipeline/adapters/express-wrapper';
+import { LoggingMiddleware } from './middleware-pipeline/middlewares/logging.middleware';
+import { AuthenticationMiddleware } from './middleware-pipeline/middlewares/authentication.middleware';
+import { ValidationMiddleware } from './middleware-pipeline/middlewares/validation.middleware';
+import { ErrorHandlingMiddleware } from './middleware-pipeline/middlewares/error-handling.middleware';
+import { RateLimitMiddleware } from './middleware-pipeline/middlewares/rate-limit.middleware';
+import { CorsMiddleware } from './middleware-pipeline/middlewares/cors.middleware';
+import { ResponseTransformInterceptor } from './middleware-pipeline/interceptors/response-transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const startupService = app.get(StartupService);
 
-  app.set('trust proxy', 1);
-  app.use(cookieParser());
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-    }),
-  );
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
-  const origins = (configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000')
-    .split(',')
-    .map((origin) => origin.trim());
-
-  app.enableCors({
-    origin: origins,
-    credentials: true,
-  });
+  // Note: CORS, cookie-parser, and helmet are registered via the middleware pipeline below
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,
   }));
 
-  // Apply tracing middleware
-  const tracingMiddleware = app.get(TracingMiddleware);
-  app.use(tracingMiddleware.use.bind(tracingMiddleware));
-
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Apply tracing interceptor globally
   const tracingInterceptor = app.get(TracingInterceptor);
-  app.useGlobalInterceptors(tracingInterceptor);
+  const responseTransform = app.get(ResponseTransformInterceptor);
+  app.useGlobalInterceptors(tracingInterceptor, responseTransform);
 
   // Apply rate limiting guard globally
   const rateLimitGuard = app.get(RateLimitGuard);
   app.useGlobalGuards(rateLimitGuard);
 
-  // Apply system load monitoring middleware
+  const tracingMiddleware = app.get(TracingMiddleware);
   const systemLoadMiddleware = app.get(SystemLoadMiddleware);
-  app.use(systemLoadMiddleware.use.bind(systemLoadMiddleware));
+  const pipeline = app.get(MiddlewarePipeline);
+  const logging = app.get(LoggingMiddleware);
+  const auth = app.get(AuthenticationMiddleware);
+  const validation = app.get(ValidationMiddleware);
+  const rateLimit = app.get(RateLimitMiddleware);
+  const cors = app.get(CorsMiddleware);
+  const errorHandler = app.get(ErrorHandlingMiddleware);
+  rateLimit.configure({ block: false });
+  pipeline
+    .register(wrap('cookieParser', cookieParser()))
+    .register(wrap('helmet', helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false })))
+    .register(cors)
+    .register(logging)
+    .register(wrap('TracingMiddleware', tracingMiddleware.use.bind(tracingMiddleware)))
+    .useWhen((req) => req.path.startsWith('/auth') || !!req.headers.authorization, auth)
+    .register(validation)
+    .register(rateLimit)
+    .register(wrap('SystemLoadMiddleware', systemLoadMiddleware.use.bind(systemLoadMiddleware)))
+    .register(errorHandler);
+  app.use(pipeline.build());
 
   // Enable graceful shutdown
   app.enableShutdownHooks();
